@@ -1,0 +1,37 @@
+kind = "web"
+previewPath = "/"
+title = "New API"
+version = "1.0.0"
+id = "artifacts/gateway"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = ["/"]
+localPort = 3000
+
+[services.env]
+PORT = "3000"
+GIN_MODE = "release"
+
+[services.development]
+run = "cd /home/runner/workspace/new-api && ./new-api-bin"
+
+[services.production]
+
+[services.production.build]
+args = ["bash", "-c", "cd new-api && CGO_ENABLED=0 go build -ldflags=\"-s -w\" -o new-api-bin ."]
+
+[services.production.run]
+args = ["bash", "-c", "cd new-api && ./new-api-bin"]
+
+[services.production.run.env]
+PORT = "3000"
+GIN_MODE = "release"
+
+[services.production.health.startup]
+path = "/api/status"

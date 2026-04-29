@@ -1,37 +1,16 @@
 modules = ["nodejs-24", "go-1.25"]
+run = "cd new-api && ./new-api-bin --port 3000 --log-dir ./logs"
 
 [deployment]
 router = "application"
 deploymentTarget = "gce"
+build = ["sh", "-c", "cd new-api && test -f web/dist/index.html && go build -o new-api-bin . && chmod +x new-api-bin"]
+run = ["sh", "-c", "cd new-api && ./new-api-bin --port 3000 --log-dir ./logs"]
 
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
-
-[workflows]
-
-[agent]
-stack = "PNPM_WORKSPACE"
-expertMode = true
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
+[env]
+GOPROXY = "https://goproxy.cn,direct"
+CGO_ENABLED = "0"
 
 [[ports]]
 localPort = 3000
-externalPort = 3000
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
 externalPort = 80
-
-[userenv]
-
-[userenv.shared]
-INITIAL_ROOT_USERNAME = "mista"
-INITIAL_ROOT_PASSWORD = "Zz123000*"

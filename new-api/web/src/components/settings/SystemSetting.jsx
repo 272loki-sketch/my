@@ -112,6 +112,7 @@ const SystemSetting = () => {
     'fetch_setting.ip_list': [],
     'fetch_setting.allowed_ports': [],
     'fetch_setting.apply_ip_filter_for_domain': true,
+    'risk.trusted_user_ids': '',
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -319,6 +320,15 @@ const SystemSetting = () => {
   const submitServerAddress = async () => {
     let ServerAddress = removeTrailingSlash(inputs.ServerAddress);
     await updateOptions([{ key: 'ServerAddress', value: ServerAddress }]);
+  };
+
+  const submitRiskSettings = async () => {
+    await updateOptions([
+      {
+        key: 'risk.trusted_user_ids',
+        value: inputs['risk.trusted_user_ids'] || '',
+      },
+    ]);
   };
 
   const submitSMTP = async () => {
@@ -745,6 +755,36 @@ const SystemSetting = () => {
                   </Row>
                   <Button onClick={submitServerAddress}>
                     {t('更新服务器地址')}
+                  </Button>
+                </Form.Section>
+              </Card>
+
+              <Card>
+                <Form.Section text={t('风控设置')}>
+                  <Banner
+                    type='info'
+                    description={t(
+                      '可信用户 ID 不会进入可疑用户列表，仅用于减少误报，不影响限速、额度、日志记录和请求头审计。',
+                    )}
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                  >
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Form.Input
+                        field='risk.trusted_user_ids'
+                        label={t('可信用户 ID')}
+                        placeholder='1,2,3'
+                        extraText={t(
+                          '多个用户 ID 用英文逗号分隔。用户 ID 可在用户管理列表或可疑用户列表中查看。',
+                        )}
+                        showClear
+                      />
+                    </Col>
+                  </Row>
+                  <Button onClick={submitRiskSettings}>
+                    {t('保存风控设置')}
                   </Button>
                 </Form.Section>
               </Card>

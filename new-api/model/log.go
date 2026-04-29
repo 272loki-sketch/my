@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -491,9 +493,13 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 		return nil, err
 	}
 
+	trustedUserIDs := getTrustedRiskUserIDs()
 	aggs := map[int]*suspiciousUserAgg{}
 	for _, log := range logs {
 		if log.UserId == 0 {
+			continue
+		}
+		if trustedUserIDs[log.UserId] {
 			continue
 		}
 		agg := aggs[log.UserId]
@@ -543,6 +549,27 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 		result = result[:limit]
 	}
 	return result, nil
+}
+
+func getTrustedRiskUserIDs() map[int]bool {
+	common.OptionMapRWMutex.RLock()
+	value := common.OptionMap["risk.trusted_user_ids"]
+	common.OptionMapRWMutex.RUnlock()
+	if strings.TrimSpace(value) == "" {
+		value = os.Getenv("TRUSTED_USER_IDS")
+	}
+	ids := map[int]bool{}
+	for _, rawID := range strings.Split(value, ",") {
+		rawID = strings.TrimSpace(rawID)
+		if rawID == "" {
+			continue
+		}
+		id, err := strconv.Atoi(rawID)
+		if err == nil && id > 0 {
+			ids[id] = true
+		}
+	}
+	return ids
 }
 
 func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {

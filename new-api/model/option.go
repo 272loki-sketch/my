@@ -181,6 +181,7 @@ func InitOptionMap() {
 	// Discord 白名单设置（默认从环境变量读取，可在系统设置中覆盖）
 	common.OptionMap["discord.required_guild_id"] = ""
 	common.OptionMap["discord.required_role_ids"] = ""
+	common.OptionMap["discord.trusted_user_ids"] = ""
 	// 风控可信用户 ID，逗号分隔。命中的用户不会进入可疑用户列表。
 	common.OptionMap["risk.trusted_user_ids"] = ""
 

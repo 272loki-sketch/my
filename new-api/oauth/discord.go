@@ -183,6 +183,11 @@ func (p *DiscordProvider) GetProviderPrefix() string {
 }
 
 func validateDiscordGuildMember(ctx context.Context, token *OAuthToken, userID string) error {
+	if isTrustedDiscordUser(userID) {
+		logger.LogDebug(ctx, "[OAuth-Discord] user %s matched trusted user whitelist, skip guild and role checks", userID)
+		return nil
+	}
+
 	guildID := strings.TrimSpace(getDiscordOption("discord.required_guild_id"))
 	if guildID == "" {
 		logger.LogError(ctx, "[OAuth-Discord] required guild id is not configured")
@@ -208,6 +213,15 @@ func validateDiscordGuildMember(ctx context.Context, token *OAuthToken, userID s
 
 	logger.LogDebug(ctx, "[OAuth-Discord] user %s is in guild %s but lacks required roles", userID, guildID)
 	return &AccessDeniedError{Message: "Discord 身份组校验失败，请确认你拥有允许登录的服务器身份组。"}
+}
+
+func isTrustedDiscordUser(userID string) bool {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false
+	}
+	trustedUserIDs := parseDiscordRoleIDs(getDiscordOption("discord.trusted_user_ids"))
+	return trustedUserIDs[userID]
 }
 
 func fetchDiscordGuildMember(ctx context.Context, accessToken string, guildID string) (*discordGuildMember, error) {
@@ -275,6 +289,8 @@ func getDiscordOption(key string) string {
 		return os.Getenv("DISCORD_REQUIRED_GUILD_ID")
 	case "discord.required_role_ids":
 		return os.Getenv("DISCORD_REQUIRED_ROLE_IDS")
+	case "discord.trusted_user_ids":
+		return os.Getenv("DISCORD_TRUSTED_USER_IDS")
 	default:
 		return ""
 	}

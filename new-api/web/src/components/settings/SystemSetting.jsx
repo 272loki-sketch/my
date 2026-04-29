@@ -58,6 +58,7 @@ const SystemSetting = () => {
     'discord.client_secret': '',
     'discord.required_guild_id': '',
     'discord.required_role_ids': '',
+    'discord.trusted_user_ids': '',
     'oidc.enabled': '',
     'oidc.client_id': '',
     'oidc.client_secret': '',
@@ -521,6 +522,12 @@ const SystemSetting = () => {
       options.push({
         key: 'discord.required_role_ids',
         value: inputs['discord.required_role_ids'] || '',
+      });
+    }
+    if (originInputs['discord.trusted_user_ids'] !== inputs['discord.trusted_user_ids']) {
+      options.push({
+        key: 'discord.trusted_user_ids',
+        value: inputs['discord.trusted_user_ids'] || '',
       });
     }
 
@@ -1558,6 +1565,22 @@ const SystemSetting = () => {
                         label={t('Discord 身份组 ID（白名单）')}
                         placeholder={t('多个身份组用英文逗号分隔，拥有其一即可')}
                         extraText={t('用户只需拥有其中任意一个身份组即可登录。留空则回退到环境变量配置')}
+                      />
+                    </Col>
+                  </Row>
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Form.Input
+                        field="['discord.trusted_user_ids']"
+                        label={t('Discord 用户 ID（可信白名单）')}
+                        placeholder={t('多个 Discord 用户 ID 用英文逗号分隔')}
+                        extraText={t(
+                          '命中的 Discord 用户会跳过服务器和身份组校验，可用于允许不在服务器内的可信朋友直接注册登录。留空则回退到环境变量 DISCORD_TRUSTED_USER_IDS。',
+                        )}
+                        showClear
                       />
                     </Col>
                   </Row>

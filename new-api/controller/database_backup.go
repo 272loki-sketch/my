@@ -6,7 +6,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,7 +107,7 @@ func ImportSQLiteDatabaseBackup(c *gin.Context) {
 		return
 	}
 
-	tmpDir := filepath.Join(os.TempDir(), "new-api-db-imports")
+	tmpDir := filepath.Join(filepath.Dir(dbPath), ".new-api-db-imports")
 	if err := os.MkdirAll(tmpDir, 0700); err != nil {
 		common.ApiError(c, err)
 		return
@@ -127,7 +130,7 @@ func ImportSQLiteDatabaseBackup(c *gin.Context) {
 
 	pendingPath := pendingSQLiteImportPath(dbPath)
 	_ = os.Remove(pendingPath)
-	if err := os.Rename(importPath, pendingPath); err != nil {
+	if err := moveFile(importPath, pendingPath); err != nil {
 		_ = os.Remove(importPath)
 		common.ApiError(c, err)
 		return
@@ -250,18 +253,88 @@ func restartNewAPIAfterResponse(dbPath string, pendingPath string, hasPendingImp
 		}
 		common.SysLog("SQLite database import completed. Previous database backup: " + currentBackupPath)
 	}
+	if err := startNewAPIProcess(); err != nil {
+		common.SysError("failed to start replacement New API process: " + err.Error())
+		os.Exit(1)
+	}
 	os.Exit(0)
+}
+
+func startNewAPIProcess() error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	args := append([]string{executable}, os.Args[1:]...)
+
+	if runtime.GOOS == "windows" {
+		quotedArgs := make([]string, 0, len(os.Args)-1)
+		for _, arg := range os.Args[1:] {
+			quotedArgs = append(quotedArgs, strconv.Quote(arg))
+		}
+		script := fmt.Sprintf(
+			"Start-Sleep -Seconds 1; Start-Process -FilePath %s -ArgumentList @(%s) -WorkingDirectory %s",
+			strconv.Quote(executable),
+			strings.Join(quotedArgs, ","),
+			strconv.Quote(workingDir),
+		)
+		cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
+		return cmd.Start()
+	}
+
+	quotedArgs := make([]string, 0, len(args))
+	for _, arg := range args {
+		quotedArgs = append(quotedArgs, shellQuote(arg))
+	}
+	script := fmt.Sprintf("sleep 1; cd %s && exec %s", shellQuote(workingDir), strings.Join(quotedArgs, " "))
+	cmd := exec.Command("sh", "-c", script)
+	cmd.Env = os.Environ()
+	return cmd.Start()
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func replaceSQLiteDatabase(importPath string, dbPath string, currentBackupPath string) error {
 	if err := os.Rename(dbPath, currentBackupPath); err != nil {
 		return fmt.Errorf("failed to backup current sqlite database before import: %w", err)
 	}
-	if err := os.Rename(importPath, dbPath); err != nil {
+	if err := moveFile(importPath, dbPath); err != nil {
 		_ = os.Rename(currentBackupPath, dbPath)
 		return fmt.Errorf("failed to replace sqlite database: %w", err)
 	}
 	return nil
+}
+
+func moveFile(src string, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	input, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	output, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err = io.Copy(output, input); err != nil {
+		_ = output.Close()
+		_ = os.Remove(dst)
+		return err
+	}
+	if err = output.Close(); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	return os.Remove(src)
 }
 
 func closeGormDB(db *gorm.DB) {

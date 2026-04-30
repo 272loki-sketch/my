@@ -54,6 +54,7 @@ const DatabaseBackupCard = () => {
       const filename =
         filenameMatch?.[1] || `new-api-sqlite-backup-${Date.now()}.db`;
       downloadBlob(res.data, filename);
+      showSuccess(t('数据库备份已开始下载'));
       return { success: true };
     } finally {
       setDatabaseBackupLoading(false);
@@ -72,6 +73,9 @@ const DatabaseBackupCard = () => {
       if (!res.data?.success) {
         throw new Error(res.data?.message || t('数据库导入失败'));
       }
+      showSuccess(
+        res.data?.message || t('数据库导入成功，请点击重启 New API 以应用导入'),
+      );
       return res.data;
     } finally {
       setDatabaseImportLoading(false);
@@ -90,6 +94,7 @@ const DatabaseBackupCard = () => {
       if (!res.data?.success) {
         throw new Error(res.data?.message || t('重启失败'));
       }
+      showSuccess(res.data?.message || t('服务即将重启'));
       return res.data;
     } finally {
       setRestartLoading(false);
@@ -106,7 +111,7 @@ const DatabaseBackupCard = () => {
     setVerificationCode,
     switchVerificationMethod,
   } = useSecureVerification({
-    successMessage: t('数据库备份已开始下载'),
+    successMessage: '',
   });
 
   const exportDatabaseBackup = async () => {

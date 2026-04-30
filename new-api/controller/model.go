@@ -207,6 +207,7 @@ func ListModels(c *gin.Context, modelType int) {
 			}
 		}
 	}
+	appendFakeModelsToOpenAIModels(&userOpenAiModels)
 
 	switch modelType {
 	case constant.ChannelTypeAnthropic:
@@ -219,12 +220,15 @@ func ListModels(c *gin.Context, modelType int) {
 				Type:        "model",
 			}
 		}
-		c.JSON(200, gin.H{
+		response := gin.H{
 			"data":     useranthropicModels,
-			"first_id": useranthropicModels[0].ID,
 			"has_more": false,
-			"last_id":  useranthropicModels[len(useranthropicModels)-1].ID,
-		})
+		}
+		if len(useranthropicModels) > 0 {
+			response["first_id"] = useranthropicModels[0].ID
+			response["last_id"] = useranthropicModels[len(useranthropicModels)-1].ID
+		}
+		c.JSON(200, response)
 	case constant.ChannelTypeGemini:
 		userGeminiModels := make([]dto.GeminiModel, len(userOpenAiModels))
 		for i, model := range userOpenAiModels {
@@ -242,6 +246,31 @@ func ListModels(c *gin.Context, modelType int) {
 			"success": true,
 			"data":    userOpenAiModels,
 			"object":  "list",
+		})
+	}
+}
+
+func appendFakeModelsToOpenAIModels(models *[]dto.OpenAIModels) {
+	for _, modelName := range model.GetFakeModels() {
+		if modelName == "" {
+			continue
+		}
+		found := false
+		for _, item := range *models {
+			if item.Id == modelName {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		*models = append(*models, dto.OpenAIModels{
+			Id:                     modelName,
+			Object:                 "model",
+			Created:                1626777600,
+			OwnedBy:                "baka",
+			SupportedEndpointTypes: model.GetModelSupportEndpointTypes(modelName),
 		})
 	}
 }

@@ -70,7 +70,12 @@ export default defineConfig({
         manualChunks: {
           'react-core': ['react', 'react-dom', 'react-router-dom'],
           'semi-ui': ['@douyinfe/semi-icons', '@douyinfe/semi-ui'],
-          tools: ['axios', 'history', 'marked'],
+          'chart-core': ['@visactor/react-vchart', '@visactor/vchart', '@visactor/vchart-semi-theme'],
+          mermaid: ['mermaid'],
+          katex: ['katex', 'rehype-katex', 'remark-math'],
+          markdown: ['marked', 'react-markdown', 'remark-gfm', 'remark-breaks', 'rehype-highlight'],
+          icons: ['lucide-react', 'react-icons', '@lobehub/icons'],
+          tools: ['axios', 'history'],
           'react-components': [
             'react-dropzone',
             'react-fireworks',

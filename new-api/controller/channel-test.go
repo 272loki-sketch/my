@@ -940,6 +940,7 @@ func TestChannelAllKeys(c *gin.Context) {
 		}
 
 		channelCopy := *channel
+		channelCopy.Key = key
 		channelCopy.Keys = []string{key}
 		channelCopy.ChannelInfo.IsMultiKey = false
 		channelCopy.ChannelInfo.MultiKeySize = 1

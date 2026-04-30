@@ -221,6 +221,7 @@ func FetchUpstreamModels(c *gin.Context) {
 		})
 		return
 	}
+	ids = model.AppendFakeModels(ids)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -1011,7 +1012,7 @@ func FetchModels(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data":    names,
+			"data":    model.AppendFakeModels(names),
 		})
 		return
 	}
@@ -1028,7 +1029,7 @@ func FetchModels(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"data":    models,
+			"data":    model.AppendFakeModels(models),
 		})
 		return
 	}
@@ -1086,7 +1087,7 @@ func FetchModels(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    models,
+		"data":    model.AppendFakeModels(models),
 	})
 }
 

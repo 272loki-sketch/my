@@ -42,17 +42,17 @@ func GetGroupEnabledModels(group string) []string {
 	var models []string
 	// Find distinct models
 	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
-	return appendFakeModels(models)
+	return AppendFakeModels(models)
 }
 
 func GetEnabledModels() []string {
 	var models []string
 	// Find distinct models
 	DB.Table("abilities").Where("enabled = ?", true).Distinct("model").Pluck("model", &models)
-	return appendFakeModels(models)
+	return AppendFakeModels(models)
 }
 
-func appendFakeModels(models []string) []string {
+func AppendFakeModels(models []string) []string {
 	for _, fakeModel := range GetFakeModels() {
 		if !common.StringsContains(models, fakeModel) {
 			models = append(models, fakeModel)

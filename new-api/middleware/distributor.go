@@ -23,8 +23,9 @@ import (
 )
 
 type ModelRequest struct {
-	Model string `json:"model"`
-	Group string `json:"group,omitempty"`
+	Model  string `json:"model"`
+	Group  string `json:"group,omitempty"`
+	Stream bool   `json:"stream,omitempty"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -37,7 +38,7 @@ func Distribute() func(c *gin.Context) {
 			return
 		}
 		if model.IsFakeModel(modelRequest.Model) {
-			respondBaka(c, modelRequest.Model)
+			respondFakeModel(c, modelRequest.Model, modelRequest.Stream)
 			return
 		}
 		if ok {
@@ -343,7 +344,18 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") && modelRequest.Model != "" {
 		modelRequest.Model = ratio_setting.WithCompactModelSuffix(modelRequest.Model)
 	}
+	modelRequest.Stream = readStreamFlag(c)
 	return &modelRequest, shouldSelectChannel, nil
+}
+
+func readStreamFlag(c *gin.Context) bool {
+	var req struct {
+		Stream *bool `json:"stream"`
+	}
+	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+		return false
+	}
+	return req.Stream != nil && *req.Stream
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {

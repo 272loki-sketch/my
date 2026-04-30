@@ -43,6 +43,25 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 }
 
+type MultiKeyTestResult struct {
+	Index      int     `json:"index"`
+	Success    bool    `json:"success"`
+	Status     int     `json:"status"`
+	Message    string  `json:"message"`
+	Time       float64 `json:"time"`
+	KeyPreview string  `json:"key_preview"`
+}
+
+type MultiKeyTestSummary struct {
+	Total         int                  `json:"total"`
+	Success       int                  `json:"success"`
+	Failed        int                  `json:"failed"`
+	ManualSkipped int                  `json:"manual_skipped"`
+	AutoDisabled  int                  `json:"auto_disabled"`
+	AutoEnabled   int                  `json:"auto_enabled"`
+	Results       []MultiKeyTestResult `json:"results"`
+}
+
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
@@ -866,6 +885,138 @@ func TestChannel(c *gin.Context) {
 		"message": "",
 		"time":    consumedTime,
 	})
+}
+
+func TestChannelAllKeys(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.GetChannelById(channelId, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !channel.ChannelInfo.IsMultiKey {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该渠道不是多密钥模式",
+		})
+		return
+	}
+
+	testModel := c.Query("model")
+	endpointType := c.Query("endpoint_type")
+	isStream, _ := strconv.ParseBool(c.Query("stream"))
+	keys := channel.GetKeys()
+	if len(keys) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该渠道没有可测试的密钥",
+		})
+		return
+	}
+
+	lock := model.GetChannelPollingLock(channel.Id)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if channel.ChannelInfo.MultiKeyStatusList == nil {
+		channel.ChannelInfo.MultiKeyStatusList = make(map[int]int)
+	}
+	if channel.ChannelInfo.MultiKeyDisabledTime == nil {
+		channel.ChannelInfo.MultiKeyDisabledTime = make(map[int]int64)
+	}
+	if channel.ChannelInfo.MultiKeyDisabledReason == nil {
+		channel.ChannelInfo.MultiKeyDisabledReason = make(map[int]string)
+	}
+
+	summary := MultiKeyTestSummary{Total: len(keys), Results: make([]MultiKeyTestResult, 0, len(keys))}
+	for i, key := range keys {
+		status := common.ChannelStatusEnabled
+		if currentStatus, ok := channel.ChannelInfo.MultiKeyStatusList[i]; ok {
+			status = currentStatus
+		}
+
+		channelCopy := *channel
+		channelCopy.Keys = []string{key}
+		channelCopy.ChannelInfo.IsMultiKey = false
+		channelCopy.ChannelInfo.MultiKeySize = 1
+		channelCopy.ChannelInfo.MultiKeyStatusList = nil
+		channelCopy.ChannelInfo.MultiKeyDisabledTime = nil
+		channelCopy.ChannelInfo.MultiKeyDisabledReason = nil
+
+		tik := time.Now()
+		result := testChannel(&channelCopy, testModel, endpointType, isStream)
+		elapsed := float64(time.Since(tik).Milliseconds()) / 1000.0
+
+		message := ""
+		if result.localErr != nil {
+			message = result.localErr.Error()
+		} else if result.newAPIError != nil {
+			message = result.newAPIError.Error()
+		}
+
+		keyResult := MultiKeyTestResult{
+			Index:      i,
+			Success:    result.localErr == nil && result.newAPIError == nil,
+			Status:     status,
+			Message:    message,
+			Time:       elapsed,
+			KeyPreview: previewKey(key),
+		}
+
+		if status == common.ChannelStatusManuallyDisabled {
+			summary.ManualSkipped++
+			keyResult.Message = common.GetStringIfEmpty(keyResult.Message, "手动禁用密钥已测试但未自动改动状态")
+		} else if keyResult.Success {
+			summary.Success++
+			if status == common.ChannelStatusAutoDisabled {
+				delete(channel.ChannelInfo.MultiKeyStatusList, i)
+				delete(channel.ChannelInfo.MultiKeyDisabledTime, i)
+				delete(channel.ChannelInfo.MultiKeyDisabledReason, i)
+				summary.AutoEnabled++
+				keyResult.Status = common.ChannelStatusEnabled
+			}
+		} else {
+			summary.Failed++
+			if channel.GetAutoBan() {
+				channel.ChannelInfo.MultiKeyStatusList[i] = common.ChannelStatusAutoDisabled
+				channel.ChannelInfo.MultiKeyDisabledTime[i] = common.GetTimestamp()
+				channel.ChannelInfo.MultiKeyDisabledReason[i] = keyResult.Message
+				summary.AutoDisabled++
+				keyResult.Status = common.ChannelStatusAutoDisabled
+			}
+		}
+
+		summary.Results = append(summary.Results, keyResult)
+		time.Sleep(common.RequestInterval)
+	}
+
+	if len(channel.ChannelInfo.MultiKeyStatusList) >= len(keys) {
+		channel.Status = common.ChannelStatusAutoDisabled
+	} else if channel.Status == common.ChannelStatusAutoDisabled {
+		channel.Status = common.ChannelStatusEnabled
+	}
+	channel.ChannelInfo.MultiKeySize = len(keys)
+	if err := channel.Update(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "多密钥测活完成",
+		"data":    summary,
+	})
+}
+
+func previewKey(key string) string {
+	if len(key) <= 10 {
+		return key
+	}
+	return key[:10] + "..."
 }
 
 var testAllChannelsLock sync.Mutex

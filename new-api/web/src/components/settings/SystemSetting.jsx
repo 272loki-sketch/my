@@ -115,6 +115,8 @@ const SystemSetting = () => {
     'fetch_setting.allowed_ports': [],
     'fetch_setting.apply_ip_filter_for_domain': true,
     'risk.trusted_user_ids': '',
+    'risk.blocked_discord_user_ids': '',
+    'risk.blocked_ips': '',
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -329,6 +331,14 @@ const SystemSetting = () => {
       {
         key: 'risk.trusted_user_ids',
         value: inputs['risk.trusted_user_ids'] || '',
+      },
+      {
+        key: 'risk.blocked_discord_user_ids',
+        value: inputs['risk.blocked_discord_user_ids'] || '',
+      },
+      {
+        key: 'risk.blocked_ips',
+        value: inputs['risk.blocked_ips'] || '',
       },
     ]);
   };
@@ -766,6 +776,28 @@ const SystemSetting = () => {
                         placeholder='https://yourdomain.com'
                         extraText={t(
                           '该服务器地址将影响支付回调地址以及默认首页展示的地址，请确保正确配置',
+                        )}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.TextArea
+                        field='risk.blocked_discord_user_ids'
+                        label={t('Discord 用户 ID 黑名单')}
+                        placeholder='123456789,987654321'
+                        rows={3}
+                        extraText={t(
+                          '多个 Discord 用户 ID 可用英文逗号、空格或换行分隔。命中后禁止注册/登录，已注册用户会自动封禁。',
+                        )}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.TextArea
+                        field='risk.blocked_ips'
+                        label={t('IP 黑名单')}
+                        placeholder={'1.2.3.4\n1.2.3.0/24'}
+                        rows={3}
+                        extraText={t(
+                          '支持单个 IP 和 CIDR，多个可用英文逗号、空格或换行分隔。命中后禁止注册，已登录/API 调用用户会自动封禁。',
                         )}
                       />
                     </Col>

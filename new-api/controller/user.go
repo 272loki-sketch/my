@@ -63,6 +63,11 @@ func Login(c *gin.Context) {
 		}
 		return
 	}
+	if model.IsBlockedIP(c.ClientIP()) {
+		_ = model.DisableUserForRisk(user.Id, "登录 IP 命中黑名单："+c.ClientIP())
+		common.ApiErrorMsg(c, "当前 IP 已被禁止访问")
+		return
+	}
 
 	// 检查是否启用2FA
 	if model.IsTwoFAEnabled(user.Id) {
@@ -140,6 +145,10 @@ func Register(c *gin.Context) {
 	}
 	if !common.PasswordRegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
+		return
+	}
+	if model.IsBlockedIP(c.ClientIP()) {
+		common.ApiErrorMsg(c, "当前 IP 已被禁止注册")
 		return
 	}
 	var user model.User

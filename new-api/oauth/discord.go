@@ -183,6 +183,10 @@ func (p *DiscordProvider) GetProviderPrefix() string {
 }
 
 func validateDiscordGuildMember(ctx context.Context, token *OAuthToken, userID string) error {
+	if model.IsBlockedDiscordUser(userID) {
+		logger.LogDebug(ctx, "[OAuth-Discord] user %s matched blocked user blacklist", userID)
+		return &AccessDeniedError{Message: "Discord 登录失败：该用户已被禁止访问。"}
+	}
 	if isTrustedDiscordUser(userID) {
 		logger.LogDebug(ctx, "[OAuth-Discord] user %s matched trusted user whitelist, skip guild and role checks", userID)
 		return nil

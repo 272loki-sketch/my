@@ -7,6 +7,7 @@ import (
 )
 
 const FakeModelsOptionKey = "global.fake_models"
+const FakeModelResponseOptionKey = "global.fake_model_response"
 
 var defaultFakeModels = []string{"gpt10", "deepseekv10", "claude opus10"}
 
@@ -33,6 +34,16 @@ func IsFakeModel(modelName string) bool {
 		}
 	}
 	return false
+}
+
+func GetFakeModelResponse() string {
+	common.OptionMapRWMutex.RLock()
+	value := strings.TrimSpace(common.OptionMap[FakeModelResponseOptionKey])
+	common.OptionMapRWMutex.RUnlock()
+	if value == "" {
+		return "baka"
+	}
+	return value
 }
 
 func parseFakeModels(value string) []string {

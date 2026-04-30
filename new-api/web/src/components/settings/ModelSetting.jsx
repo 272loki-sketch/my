@@ -42,6 +42,7 @@ const ModelSetting = () => {
     'global.pass_through_request_enabled': false,
     'global.thinking_model_blacklist': '[]',
     'global.fake_models': '["gpt10","deepseekv10","claude opus10"]',
+    'global.fake_model_response': 'baka',
     'global.chat_completions_to_responses_policy': '{}',
     'general_setting.ping_interval_enabled': false,
     'general_setting.ping_interval_seconds': 60,

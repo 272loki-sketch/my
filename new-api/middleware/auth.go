@@ -128,6 +128,15 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	if userId, ok := id.(int); ok && model.IsBlockedIP(c.ClientIP()) {
+		_ = model.DisableUserForRisk(userId, "已登录访问 IP 命中黑名单："+c.ClientIP())
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "当前 IP 已被禁止访问，用户已自动封禁",
+		})
+		c.Abort()
+		return
+	}
 	if role.(int) < minRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -374,6 +383,11 @@ func TokenAuth() func(c *gin.Context) {
 		userEnabled := userCache.Status == common.UserStatusEnabled
 		if !userEnabled {
 			abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
+			return
+		}
+		if model.IsBlockedIP(c.ClientIP()) {
+			_ = model.DisableUserForRisk(token.UserId, "API 调用 IP 命中黑名单："+c.ClientIP())
+			abortWithOpenAiMessage(c, http.StatusForbidden, "当前 IP 已被禁止访问，用户已自动封禁", types.ErrorCodeAccessDenied)
 			return
 		}
 

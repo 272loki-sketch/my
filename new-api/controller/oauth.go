@@ -116,6 +116,16 @@ func HandleOAuth(c *gin.Context) {
 		}
 		return
 	}
+	if provider.GetName() == "Discord" && model.IsBlockedDiscordUser(oauthUser.ProviderUserID) {
+		_ = model.DisableUserForRisk(user.Id, "Discord 用户 ID 命中黑名单："+oauthUser.ProviderUserID)
+		common.ApiErrorMsg(c, "当前 Discord 用户已被禁止访问")
+		return
+	}
+	if model.IsBlockedIP(c.ClientIP()) {
+		_ = model.DisableUserForRisk(user.Id, "OAuth 登录 IP 命中黑名单："+c.ClientIP())
+		common.ApiErrorMsg(c, "当前 IP 已被禁止访问")
+		return
+	}
 
 	// 8. Check user status
 	if user.Status != common.UserStatusEnabled {
@@ -198,6 +208,18 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 // findOrCreateOAuthUser finds existing user or creates new user
 func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, session sessions.Session) (*model.User, error) {
 	user := &model.User{}
+	if provider.GetName() == "Discord" && model.IsBlockedDiscordUser(oauthUser.ProviderUserID) {
+		if provider.IsUserIDTaken(oauthUser.ProviderUserID) {
+			_ = provider.FillUserByProviderID(user, oauthUser.ProviderUserID)
+			if user.Id > 0 {
+				_ = model.DisableUserForRisk(user.Id, "Discord 用户 ID 命中黑名单："+oauthUser.ProviderUserID)
+			}
+		}
+		return nil, fmt.Errorf("当前 Discord 用户已被禁止访问")
+	}
+	if model.IsBlockedIP(c.ClientIP()) {
+		return nil, fmt.Errorf("当前 IP 已被禁止注册")
+	}
 
 	// Check if user already exists with new ID
 	if provider.IsUserIDTaken(oauthUser.ProviderUserID) {

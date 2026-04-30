@@ -461,15 +461,18 @@ type SuspiciousUser struct {
 }
 
 type suspiciousUserAgg struct {
-	UserId    int
-	Username  string
-	Requests  int
-	FirstSeen int64
-	LastSeen  int64
-	Ips       map[string]bool
-	Hours     map[int64]int
-	Clients   map[string]int
-	SharedIPs map[string]int
+	UserId              int
+	Username            string
+	Requests            int
+	FirstSeen           int64
+	LastSeen            int64
+	Ips                 map[string]bool
+	Hours               map[int64]int
+	Clients             map[string]int
+	SharedIPs           map[string]int
+	NodeFetchRequests   int
+	ProxyHeaderRequests int
+	MaxContentLength    int64
 }
 
 type SuspiciousUserNote struct {
@@ -543,6 +546,16 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 		agg.Hours[log.CreatedAt/3600]++
 		if client := extractClientSoftware(log.Other); client != "" {
 			agg.Clients[client]++
+		}
+		signals := extractCloudTavernSignals(log.Other)
+		if signals.NodeFetch {
+			agg.NodeFetchRequests++
+		}
+		if signals.ProxyHeader {
+			agg.ProxyHeaderRequests++
+		}
+		if signals.ContentLength > agg.MaxContentLength {
+			agg.MaxContentLength = signals.ContentLength
 		}
 	}
 	for _, agg := range aggs {
@@ -676,6 +689,10 @@ func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {
 		score += 2
 		reasons = append(reasons, fmt.Sprintf("疑似云酒馆（自部署云酒馆：长期固定单 IP 使用，%d 个活跃小时，%d 次请求）", activeHours, agg.Requests))
 	}
+	if isCloudTavernResaleSuspect(agg, len(ips), maxSharedIpUserCount, activeHours) {
+		score += 3
+		reasons = append(reasons, fmt.Sprintf("疑似云酒馆/账号转租（固定单 IP + Node 代理 + 长上下文请求，最大请求体 %.1f KB）", float64(agg.MaxContentLength)/1024))
+	}
 	if activeHours >= 20 {
 		score += 4
 		reasons = append(reasons, fmt.Sprintf("接近全天不间断使用（%d 个活跃小时）", activeHours))
@@ -714,6 +731,60 @@ func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {
 		Reasons:            reasons,
 		Score:              score,
 	}
+}
+
+type cloudTavernSignals struct {
+	NodeFetch     bool
+	ProxyHeader   bool
+	ContentLength int64
+}
+
+func extractCloudTavernSignals(other string) cloudTavernSignals {
+	result := cloudTavernSignals{}
+	otherMap, _ := common.StrToMap(other)
+	if otherMap == nil {
+		return result
+	}
+	if client, ok := otherMap["client_software"].(string); ok && strings.Contains(strings.ToLower(client), "node-fetch") {
+		result.NodeFetch = true
+	}
+	headers, ok := otherMap["request_headers"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+	for key, value := range headers {
+		keyLower := strings.ToLower(key)
+		valueStr := strings.ToLower(fmt.Sprintf("%v", value))
+		if keyLower == "user-agent" && strings.Contains(valueStr, "node-fetch") {
+			result.NodeFetch = true
+		}
+		if keyLower == "via" || keyLower == "x-forwarded-for" || keyLower == "x-forwarded-host" || keyLower == "x-cloud-trace-context" || keyLower == "server-timing" {
+			result.ProxyHeader = true
+		}
+		if keyLower == "content-length" {
+			contentLength, err := strconv.ParseInt(strings.TrimSpace(fmt.Sprintf("%v", value)), 10, 64)
+			if err == nil && contentLength > result.ContentLength {
+				result.ContentLength = contentLength
+			}
+		}
+	}
+	return result
+}
+
+func isCloudTavernResaleSuspect(agg *suspiciousUserAgg, ipCount int, maxSharedIpUserCount int, activeHours int) bool {
+	if ipCount != 1 || maxSharedIpUserCount > 1 {
+		return false
+	}
+	if agg.NodeFetchRequests < 5 {
+		return false
+	}
+	if agg.ProxyHeaderRequests < 5 {
+		return false
+	}
+	if agg.MaxContentLength >= 100*1024 {
+		return agg.Requests >= 20 || activeHours >= 2
+	}
+	return agg.Requests >= 80 || activeHours >= 6
 }
 
 func getSuspiciousNearLimitThreshold() int {

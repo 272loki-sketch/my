@@ -55,6 +55,7 @@ const MultiKeyManageModal = ({ visible, onCancel, channel, onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [keyStatusList, setKeyStatusList] = useState([]);
   const [operationLoading, setOperationLoading] = useState({});
+  const [lastTestSummary, setLastTestSummary] = useState(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -273,6 +274,33 @@ const MultiKeyManageModal = ({ visible, onCancel, channel, onRefresh }) => {
     }
   };
 
+  const handleTestAllKeys = async () => {
+    if (!channel?.id) return;
+    setOperationLoading((prev) => ({ ...prev, test_all: true }));
+    try {
+      const res = await API.post(`/api/channel/${channel.id}/test_keys`);
+      if (res.data.success) {
+        const summary = res.data.data;
+        setLastTestSummary(summary);
+        showSuccess(
+          t('多密钥测活完成：成功 ${success}，失败 ${failed}，自动启用 ${enabled}，自动禁用 ${disabled}')
+            .replace('${success}', summary?.success || 0)
+            .replace('${failed}', summary?.failed || 0)
+            .replace('${enabled}', summary?.auto_enabled || 0)
+            .replace('${disabled}', summary?.auto_disabled || 0),
+        );
+        await loadKeyStatus(currentPage, pageSize);
+        onRefresh && onRefresh();
+      } else {
+        showError(res.data.message || t('测试全部密钥失败'));
+      }
+    } catch (error) {
+      showError(t('测试全部密钥失败'));
+    } finally {
+      setOperationLoading((prev) => ({ ...prev, test_all: false }));
+    }
+  };
+
   // Handle page change
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -312,6 +340,7 @@ const MultiKeyManageModal = ({ visible, onCancel, channel, onRefresh }) => {
       setManualDisabledCount(0);
       setAutoDisabledCount(0);
       setStatusFilter(null); // Reset filter
+      setLastTestSummary(null);
     }
   }, [visible]);
 
@@ -596,6 +625,27 @@ const MultiKeyManageModal = ({ visible, onCancel, channel, onRefresh }) => {
 
         {/* Table */}
         <div className='flex-1 flex flex-col min-h-0'>
+          {lastTestSummary && (
+            <Card className='!rounded-xl mb-3'>
+              <Space wrap>
+                <Tag color='green'>
+                  {t('成功')}: {lastTestSummary.success || 0}
+                </Tag>
+                <Tag color='red'>
+                  {t('失败')}: {lastTestSummary.failed || 0}
+                </Tag>
+                <Tag color='green'>
+                  {t('自动启用')}: {lastTestSummary.auto_enabled || 0}
+                </Tag>
+                <Tag color='orange'>
+                  {t('自动禁用')}: {lastTestSummary.auto_disabled || 0}
+                </Tag>
+                <Tag color='grey'>
+                  {t('手动禁用未改动')}: {lastTestSummary.manual_skipped || 0}
+                </Tag>
+              </Space>
+            </Card>
+          )}
           <Spin spinning={loading}>
             <Card className='!rounded-xl'>
               <Table
@@ -631,6 +681,14 @@ const MultiKeyManageModal = ({ visible, onCancel, channel, onRefresh }) => {
                       style={{ display: 'flex', justifyContent: 'flex-end' }}
                     >
                       <Space>
+                        <Button
+                          size='small'
+                          type='primary'
+                          onClick={handleTestAllKeys}
+                          loading={operationLoading.test_all}
+                        >
+                          {t('测试全部密钥')}
+                        </Button>
                         <Button
                           size='small'
                           type='tertiary'

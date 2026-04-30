@@ -70,6 +70,7 @@ const defaultGlobalSettingInputs = {
   'global.pass_through_request_enabled': false,
   'global.thinking_model_blacklist': '[]',
   'global.fake_models': '["gpt10","deepseekv10","claude opus10"]',
+  'global.fake_model_response': 'baka',
   'global.chat_completions_to_responses_policy': '{}',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
@@ -276,6 +277,26 @@ export default function SettingGlobalModel(props) {
                     setInputs({
                       ...inputs,
                       'global.fake_models': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+
+            <Row>
+              <Col span={24}>
+                <Form.TextArea
+                  label={t('假模型返回内容')}
+                  field={'global.fake_model_response'}
+                  placeholder='baka'
+                  rows={3}
+                  extraText={t(
+                    '用户调用假模型时返回的内容。支持普通请求和流式请求。留空则返回 baka。',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'global.fake_model_response': value,
                     })
                   }
                 />

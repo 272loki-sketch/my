@@ -184,6 +184,8 @@ func InitOptionMap() {
 	common.OptionMap["discord.trusted_user_ids"] = ""
 	// 风控可信用户 ID，逗号分隔。命中的用户不会进入可疑用户列表。
 	common.OptionMap["risk.trusted_user_ids"] = ""
+	// 假模型/蜜罐模型：命中后不请求上游，直接返回 baka。
+	common.OptionMap["global.fake_models"] = `["gpt10","deepseekv10","claude opus10"]`
 
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()

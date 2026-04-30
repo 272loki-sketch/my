@@ -79,6 +79,14 @@ func init() {
 			OwnedBy: minimax.ChannelName,
 		})
 	}
+	for _, modelName := range model.GetFakeModels() {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: "baka",
+		})
+	}
 	for modelName, _ := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
 			Id:      modelName,
@@ -239,9 +247,21 @@ func ListModels(c *gin.Context, modelType int) {
 }
 
 func ChannelListModels(c *gin.Context) {
+	models := append([]dto.OpenAIModels{}, openAIModels...)
+	for _, modelName := range model.GetFakeModels() {
+		if _, ok := openAIModelsMap[modelName]; ok {
+			continue
+		}
+		models = append(models, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: "baka",
+		})
+	}
 	c.JSON(200, gin.H{
 		"success": true,
-		"data":    openAIModels,
+		"data":    models,
 	})
 }
 
@@ -261,6 +281,15 @@ func EnabledListModels(c *gin.Context) {
 
 func RetrieveModel(c *gin.Context, modelType int) {
 	modelId := c.Param("model")
+	if model.IsFakeModel(modelId) {
+		c.JSON(200, dto.OpenAIModels{
+			Id:      modelId,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: "baka",
+		})
+		return
+	}
 	if aiModel, ok := openAIModelsMap[modelId]; ok {
 		switch modelType {
 		case constant.ChannelTypeAnthropic:

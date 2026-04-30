@@ -41,6 +41,7 @@ const ModelSetting = () => {
     'claude.thinking_adapter_budget_tokens_percentage': 0.8,
     'global.pass_through_request_enabled': false,
     'global.thinking_model_blacklist': '[]',
+    'global.fake_models': '["gpt10","deepseekv10","claude opus10"]',
     'global.chat_completions_to_responses_policy': '{}',
     'general_setting.ping_interval_enabled': false,
     'general_setting.ping_interval_seconds': 60,
@@ -65,6 +66,7 @@ const ModelSetting = () => {
           item.key === 'claude.default_max_tokens' ||
           item.key === 'gemini.supported_imagine_models' ||
           item.key === 'global.thinking_model_blacklist' ||
+          item.key === 'global.fake_models' ||
           item.key === 'global.chat_completions_to_responses_policy'
         ) {
           if (item.value !== '') {

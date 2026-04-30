@@ -69,6 +69,7 @@ const chatCompletionsToResponsesPolicyAllChannelsExample = JSON.stringify(
 const defaultGlobalSettingInputs = {
   'global.pass_through_request_enabled': false,
   'global.thinking_model_blacklist': '[]',
+  'global.fake_models': '["gpt10","deepseekv10","claude opus10"]',
   'global.chat_completions_to_responses_policy': '{}',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
@@ -96,6 +97,10 @@ export default function SettingGlobalModel(props) {
 
   const normalizeValueBeforeSave = (key, value) => {
     if (key === 'global.thinking_model_blacklist') {
+      const text = typeof value === 'string' ? value.trim() : '';
+      return text === '' ? '[]' : value;
+    }
+    if (key === 'global.fake_models') {
       const text = typeof value === 'string' ? value.trim() : '';
       return text === '' ? '[]' : value;
     }
@@ -147,6 +152,16 @@ export default function SettingGlobalModel(props) {
       if (props.options[key] !== undefined) {
         let value = props.options[key];
         if (key === 'global.thinking_model_blacklist') {
+          try {
+            value =
+              value && String(value).trim() !== ''
+                ? JSON.stringify(JSON.parse(value), null, 2)
+                : defaultGlobalSettingInputs[key];
+          } catch (error) {
+            value = defaultGlobalSettingInputs[key];
+          }
+        }
+        if (key === 'global.fake_models') {
           try {
             value =
               value && String(value).trim() !== ''
@@ -228,6 +243,39 @@ export default function SettingGlobalModel(props) {
                     setInputs({
                       ...inputs,
                       'global.thinking_model_blacklist': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+
+            <Row>
+              <Col span={24}>
+                <Form.TextArea
+                  label={t('假模型 / 蜜罐模型列表')}
+                  field={'global.fake_models'}
+                  placeholder={
+                    t('例如：') +
+                    '\n' +
+                    JSON.stringify(['gpt10', 'deepseekv10', 'claude opus10'], null, 2)
+                  }
+                  rows={4}
+                  rules={[
+                    {
+                      validator: (rule, value) => {
+                        if (!value || value.trim() === '') return true;
+                        return verifyJSON(value);
+                      },
+                      message: t('不是合法的 JSON 字符串'),
+                    },
+                  ]}
+                  extraText={t(
+                    '这些模型会出现在模型列表中，也可以作为渠道测试模型填写；真实调用时不会请求上游，会直接返回 baka。',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'global.fake_models': value,
                     })
                   }
                 />

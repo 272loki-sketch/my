@@ -125,15 +125,45 @@ func ImportSQLiteDatabaseBackup(c *gin.Context) {
 		return
 	}
 
-	currentBackupPath := dbPath + fmt.Sprintf(".before-import-%s.bak", time.Now().Format("20060102-150405"))
+	pendingPath := pendingSQLiteImportPath(dbPath)
+	_ = os.Remove(pendingPath)
+	if err := os.Rename(importPath, pendingPath); err != nil {
+		_ = os.Remove(importPath)
+		common.ApiError(c, err)
+		return
+	}
 	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("超级管理员导入 SQLite 数据库备份，IP：%s", c.ClientIP()))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "数据库备份已上传并校验通过，服务即将停止以替换数据库。请稍后手动重启服务。",
+		"message": "数据库备份已上传并校验通过。请点击重启 New API 以应用导入。",
+		"data": gin.H{
+			"pending_import": true,
+		},
+	})
+}
+
+func RestartNewAPI(c *gin.Context) {
+	dbPath, err := getSQLiteDatabasePath()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pendingPath := pendingSQLiteImportPath(dbPath)
+	hasPendingImport := false
+	if info, err := os.Stat(pendingPath); err == nil && !info.IsDir() {
+		hasPendingImport = true
+	}
+
+	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("超级管理员请求重启 New API，IP：%s，待应用导入：%t", c.ClientIP(), hasPendingImport))
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "服务即将重启。若有待导入数据库，将在退出前完成替换。",
+		"data":    gin.H{"pending_import": hasPendingImport},
 	})
 
-	go replaceSQLiteDatabaseAndExit(importPath, dbPath, currentBackupPath)
+	go restartNewAPIAfterResponse(dbPath, pendingPath, hasPendingImport)
 }
 
 func getSQLiteDatabasePath() (string, error) {
@@ -157,6 +187,10 @@ func getSQLiteDatabasePath() (string, error) {
 func createSQLiteBackup(backupPath string) error {
 	backupSQLPath := strings.ReplaceAll(backupPath, "'", "''")
 	return model.DB.Exec("VACUUM INTO '" + backupSQLPath + "'").Error
+}
+
+func pendingSQLiteImportPath(dbPath string) string {
+	return dbPath + ".pending-import"
 }
 
 func saveUploadedFile(fileHeader *multipart.FileHeader, targetPath string) error {
@@ -204,25 +238,30 @@ func validateSQLiteBackup(path string) error {
 	return nil
 }
 
-func replaceSQLiteDatabaseAndExit(importPath string, dbPath string, currentBackupPath string) {
+func restartNewAPIAfterResponse(dbPath string, pendingPath string, hasPendingImport bool) {
 	time.Sleep(800 * time.Millisecond)
 	closeGormDB(model.LOG_DB)
 	closeGormDB(model.DB)
+	if hasPendingImport {
+		currentBackupPath := dbPath + fmt.Sprintf(".before-import-%s.bak", time.Now().Format("20060102-150405"))
+		if err := replaceSQLiteDatabase(pendingPath, dbPath, currentBackupPath); err != nil {
+			common.SysError("failed to apply pending sqlite import: " + err.Error())
+			os.Exit(1)
+		}
+		common.SysLog("SQLite database import completed. Previous database backup: " + currentBackupPath)
+	}
+	os.Exit(0)
+}
 
+func replaceSQLiteDatabase(importPath string, dbPath string, currentBackupPath string) error {
 	if err := os.Rename(dbPath, currentBackupPath); err != nil {
-		common.SysError("failed to backup current sqlite database before import: " + err.Error())
-		_ = os.Remove(importPath)
-		os.Exit(1)
+		return fmt.Errorf("failed to backup current sqlite database before import: %w", err)
 	}
 	if err := os.Rename(importPath, dbPath); err != nil {
-		common.SysError("failed to replace sqlite database: " + err.Error())
 		_ = os.Rename(currentBackupPath, dbPath)
-		_ = os.Remove(importPath)
-		os.Exit(1)
+		return fmt.Errorf("failed to replace sqlite database: %w", err)
 	}
-
-	common.SysLog("SQLite database import completed. Previous database backup: " + currentBackupPath)
-	os.Exit(0)
+	return nil
 }
 
 func closeGormDB(db *gorm.DB) {

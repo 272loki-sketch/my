@@ -28,6 +28,7 @@ const DatabaseBackupCard = () => {
   const { t } = useTranslation();
   const [databaseBackupLoading, setDatabaseBackupLoading] = useState(false);
   const [databaseImportLoading, setDatabaseImportLoading] = useState(false);
+  const [restartLoading, setRestartLoading] = useState(false);
   const importInputRef = useRef(null);
 
   const downloadBlob = (blob, filename) => {
@@ -80,6 +81,21 @@ const DatabaseBackupCard = () => {
     }
   };
 
+  const restartNewAPI = async () => {
+    try {
+      const res = await API.post('/api/performance/restart', {}, {
+        disableDuplicate: true,
+        skipErrorHandler: true,
+      });
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || t('重启失败'));
+      }
+      return res.data;
+    } finally {
+      setRestartLoading(false);
+    }
+  };
+
   const {
     isModalVisible,
     verificationMethods,
@@ -127,9 +143,9 @@ const DatabaseBackupCard = () => {
     Modal.confirm({
       title: t('导入 SQLite 数据库备份'),
       content: t(
-        '导入会替换当前 SQLite 数据库，当前数据库会先保存为 .before-import-时间.bak。导入成功后服务会自动停止，你需要手动重启服务后新数据库才会生效。请确认已经下载并保存当前数据库备份。',
+        '导入会先暂存数据库文件，不会立即替换运行中的数据库。点击“重启 New API”后，系统会先备份当前数据库为 .before-import-时间.bak，再替换数据库并重启。请确认已经下载并保存当前数据库备份。',
       ),
-      okText: t('确认导入并停止服务'),
+      okText: t('确认导入'),
       cancelText: t('取消'),
       okButtonProps: { type: 'danger' },
       onOk: async () => {
@@ -167,6 +183,34 @@ const DatabaseBackupCard = () => {
     confirmImportDatabaseBackup(file);
   };
 
+  const confirmRestartNewAPI = () => {
+    Modal.confirm({
+      title: t('重启 New API'),
+      content: t(
+        '服务会在响应后退出，Replit Run/Deployment 通常会自动拉起新进程；如果没有自动恢复，请手动点击 Run 或重新启动服务。若存在待导入数据库，将在退出前完成替换。',
+      ),
+      okText: t('确认重启'),
+      cancelText: t('取消'),
+      okButtonProps: { type: 'danger' },
+      onOk: async () => {
+        setRestartLoading(true);
+        try {
+          const started = await startVerification(restartNewAPI, {
+            title: t('重启 New API'),
+            description: t('重启服务是高危操作，请先完成两步验证或 Passkey 验证。'),
+            preferredMethod: 'passkey',
+          });
+          if (!started) {
+            setRestartLoading(false);
+          }
+        } catch (error) {
+          setRestartLoading(false);
+          showError(error.message || t('重启失败'));
+        }
+      },
+    });
+  };
+
   return (
     <Card>
       <Form.Section text={t('数据库备份')}>
@@ -191,6 +235,13 @@ const DatabaseBackupCard = () => {
             onClick={() => importInputRef.current?.click()}
           >
             {t('导入 SQLite 数据库')}
+          </Button>
+          <Button
+            type='danger'
+            loading={restartLoading}
+            onClick={confirmRestartNewAPI}
+          >
+            {t('重启 New API')}
           </Button>
         </Space>
         <input

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -269,23 +270,30 @@ func startNewAPIProcess() error {
 	if err != nil {
 		return err
 	}
-	args := append([]string{executable}, os.Args[1:]...)
 
 	if runtime.GOOS == "windows" {
-		quotedArgs := make([]string, 0, len(os.Args)-1)
+		cmdPath := filepath.Join(os.TempDir(), fmt.Sprintf("new-api-restart-%d.cmd", time.Now().UnixNano()))
+		quotedArgs := make([]string, 0, len(os.Args))
+		quotedArgs = append(quotedArgs, strconv.Quote(executable))
 		for _, arg := range os.Args[1:] {
 			quotedArgs = append(quotedArgs, strconv.Quote(arg))
 		}
-		script := fmt.Sprintf(
-			"Start-Sleep -Seconds 1; Start-Process -FilePath %s -ArgumentList @(%s) -WorkingDirectory %s",
-			strconv.Quote(executable),
-			strings.Join(quotedArgs, ","),
+		cmdContent := fmt.Sprintf(
+			"@echo off\r\ncd /d %s\r\ntimeout /t 2 /nobreak >nul\r\nstart \"\" %s\r\ndel \"%%~f0\"\r\n",
 			strconv.Quote(workingDir),
+			strings.Join(quotedArgs, " "),
 		)
-		cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
+		if err := os.WriteFile(cmdPath, []byte(cmdContent), 0600); err != nil {
+			return err
+		}
+		cmd := exec.Command("cmd", "/C", "start", "", cmdPath)
 		return cmd.Start()
 	}
 
+	args := append([]string{executable}, os.Args[1:]...)
+	if err := syscall.Exec(executable, args, os.Environ()); err != nil {
+		common.SysError("syscall exec restart failed, fallback to shell start: " + err.Error())
+	}
 	quotedArgs := make([]string, 0, len(args))
 	for _, arg := range args {
 		quotedArgs = append(quotedArgs, shellQuote(arg))

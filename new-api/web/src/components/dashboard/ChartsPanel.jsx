@@ -30,6 +30,9 @@ const ChartsPanel = ({
   spec_pie,
   spec_rank_bar,
   spec_user_rank,
+  spec_today_user_rank,
+  spec_user_call_rank,
+  spec_today_user_call_rank,
   spec_user_trend,
   isAdminUser,
   CARD_PROPS,
@@ -61,7 +64,16 @@ const ChartsPanel = ({
               <TabPane tab={<span>{t('用户消耗排行')}</span>} itemKey='5' />
             )}
             {isAdminUser && (
-              <TabPane tab={<span>{t('用户消耗趋势')}</span>} itemKey='6' />
+              <TabPane tab={<span>{t('今日用户消耗排行')}</span>} itemKey='6' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('用户调用排行')}</span>} itemKey='7' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('今日用户调用排行')}</span>} itemKey='8' />
+            )}
+            {isAdminUser && (
+              <TabPane tab={<span>{t('用户消耗趋势')}</span>} itemKey='9' />
             )}
           </Tabs>
         </div>
@@ -85,6 +97,15 @@ const ChartsPanel = ({
           <VChart spec={spec_user_rank} option={CHART_CONFIG} />
         )}
         {activeChartTab === '6' && isAdminUser && (
+          <VChart spec={spec_today_user_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '7' && isAdminUser && (
+          <VChart spec={spec_user_call_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '8' && isAdminUser && (
+          <VChart spec={spec_today_user_call_rank} option={CHART_CONFIG} />
+        )}
+        {activeChartTab === '9' && isAdminUser && (
           <VChart spec={spec_user_trend} option={CHART_CONFIG} />
         )}
       </div>

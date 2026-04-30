@@ -43,6 +43,7 @@ import {
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import CustomOAuthSetting from './CustomOAuthSetting';
+import DatabaseBackupCard from './DatabaseBackupCard';
 
 const SystemSetting = () => {
   const { t } = useTranslation();
@@ -512,19 +513,28 @@ const SystemSetting = () => {
         value: inputs['discord.client_secret'],
       });
     }
-    if (originInputs['discord.required_guild_id'] !== inputs['discord.required_guild_id']) {
+    if (
+      originInputs['discord.required_guild_id'] !==
+      inputs['discord.required_guild_id']
+    ) {
       options.push({
         key: 'discord.required_guild_id',
         value: inputs['discord.required_guild_id'] || '',
       });
     }
-    if (originInputs['discord.required_role_ids'] !== inputs['discord.required_role_ids']) {
+    if (
+      originInputs['discord.required_role_ids'] !==
+      inputs['discord.required_role_ids']
+    ) {
       options.push({
         key: 'discord.required_role_ids',
         value: inputs['discord.required_role_ids'] || '',
       });
     }
-    if (originInputs['discord.trusted_user_ids'] !== inputs['discord.trusted_user_ids']) {
+    if (
+      originInputs['discord.trusted_user_ids'] !==
+      inputs['discord.trusted_user_ids']
+    ) {
       options.push({
         key: 'discord.trusted_user_ids',
         value: inputs['discord.trusted_user_ids'] || '',
@@ -765,6 +775,8 @@ const SystemSetting = () => {
                   </Button>
                 </Form.Section>
               </Card>
+
+              <DatabaseBackupCard />
 
               <Card>
                 <Form.Section text={t('风控设置')}>
@@ -1555,16 +1567,24 @@ const SystemSetting = () => {
                       <Form.Input
                         field="['discord.required_guild_id']"
                         label={t('Discord 服务器 ID（白名单）')}
-                        placeholder={t('填写后仅允许该服务器成员登录，留空不限制')}
-                        extraText={t('在系统设置中修改后即时生效，无需重启服务器。留空则回退到环境变量配置')}
+                        placeholder={t(
+                          '填写后仅允许该服务器成员登录，留空不限制',
+                        )}
+                        extraText={t(
+                          '在系统设置中修改后即时生效，无需重启服务器。留空则回退到环境变量配置',
+                        )}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                       <Form.Input
                         field="['discord.required_role_ids']"
                         label={t('Discord 身份组 ID（白名单）')}
-                        placeholder={t('多个身份组用英文逗号分隔，拥有其一即可')}
-                        extraText={t('用户只需拥有其中任意一个身份组即可登录。留空则回退到环境变量配置')}
+                        placeholder={t(
+                          '多个身份组用英文逗号分隔，拥有其一即可',
+                        )}
+                        extraText={t(
+                          '用户只需拥有其中任意一个身份组即可登录。留空则回退到环境变量配置',
+                        )}
                       />
                     </Col>
                   </Row>

@@ -47,12 +47,12 @@ const UsersPage = () => {
     formInitValues,
     setFormApi,
     searchUsers,
-    loadUsers,
-    activePage,
     pageSize,
     groupOptions,
     loading,
     searching,
+    sortOptions,
+    handleSortChange,
 
     // Description state
     compactMode,
@@ -94,12 +94,12 @@ const UsersPage = () => {
               formInitValues={formInitValues}
               setFormApi={setFormApi}
               searchUsers={searchUsers}
-              loadUsers={loadUsers}
-              activePage={activePage}
               pageSize={pageSize}
               groupOptions={groupOptions}
               loading={loading}
               searching={searching}
+              sortOptions={sortOptions}
+              handleSortChange={handleSortChange}
               t={t}
             />
           </div>

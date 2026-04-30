@@ -25,12 +25,12 @@ const UsersFilters = ({
   formInitValues,
   setFormApi,
   searchUsers,
-  loadUsers,
-  activePage,
   pageSize,
   groupOptions,
   loading,
   searching,
+  sortOptions,
+  handleSortChange,
   t,
 }) => {
   const formApiRef = useRef(null);
@@ -39,9 +39,20 @@ const UsersFilters = ({
     if (!formApiRef.current) return;
     formApiRef.current.reset();
     setTimeout(() => {
-      loadUsers(1, pageSize);
+      handleSortChange('id', 'desc');
     }, 100);
   };
+
+  const orderOptions = [
+    { label: t('降序'), value: 'desc' },
+    { label: t('升序'), value: 'asc' },
+  ];
+
+  const sortOptionsList = [
+    { label: 'ID', value: 'id' },
+    { label: t('剩余额度'), value: 'quota' },
+    { label: t('注册IP'), value: 'register_ip' },
+  ];
 
   return (
     <Form
@@ -84,6 +95,32 @@ const UsersFilters = ({
             }}
             className='w-full'
             showClear
+            pure
+            size='small'
+          />
+        </div>
+        <div className='w-full md:w-36'>
+          <Form.Select
+            field='sortField'
+            initValue={sortOptions?.sort || 'id'}
+            optionList={sortOptionsList}
+            onChange={(value) => {
+              handleSortChange(value || 'id', sortOptions?.order || 'desc');
+            }}
+            className='w-full'
+            pure
+            size='small'
+          />
+        </div>
+        <div className='w-full md:w-28'>
+          <Form.Select
+            field='sortOrder'
+            initValue={sortOptions?.order || 'desc'}
+            optionList={orderOptions}
+            onChange={(value) => {
+              handleSortChange(sortOptions?.sort || 'id', value || 'desc');
+            }}
+            className='w-full'
             pure
             size='small'
           />

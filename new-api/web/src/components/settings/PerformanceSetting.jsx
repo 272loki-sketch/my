@@ -21,6 +21,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Spin } from '@douyinfe/semi-ui';
 import SettingsPerformance from '../../pages/Setting/Performance/SettingsPerformance';
 import { API, showError, toBoolean } from '../../helpers';
+import DatabaseBackupCard from './DatabaseBackupCard';
 
 const PerformanceSetting = () => {
   let [inputs, setInputs] = useState({
@@ -72,6 +73,9 @@ const PerformanceSetting = () => {
         <Card style={{ marginTop: '10px' }}>
           <SettingsPerformance options={inputs} refresh={onRefresh} />
         </Card>
+        <div style={{ marginTop: '10px' }}>
+          <DatabaseBackupCard />
+        </div>
       </Spin>
     </>
   );

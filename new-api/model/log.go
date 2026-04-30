@@ -447,6 +447,7 @@ type SuspiciousUser struct {
 	Username           string   `json:"username"`
 	RequestCount       int      `json:"request_count"`
 	IpCount            int      `json:"ip_count"`
+	SharedIpUserCount  int      `json:"shared_ip_user_count"`
 	Ips                []string `json:"ips"`
 	ActiveHourCount    int      `json:"active_hour_count"`
 	MaxHourlyRequests  int      `json:"max_hourly_requests"`
@@ -467,6 +468,7 @@ type suspiciousUserAgg struct {
 	Ips       map[string]bool
 	Hours     map[int64]int
 	Clients   map[string]int
+	SharedIPs map[string]int
 }
 
 func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, limit int) ([]SuspiciousUser, error) {
@@ -495,6 +497,7 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 
 	trustedUserIDs := getTrustedRiskUserIDs()
 	aggs := map[int]*suspiciousUserAgg{}
+	ipUsers := map[string]map[int]bool{}
 	for _, log := range logs {
 		if log.UserId == 0 {
 			continue
@@ -525,10 +528,23 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 		}
 		if log.Ip != "" {
 			agg.Ips[log.Ip] = true
+			if ipUsers[log.Ip] == nil {
+				ipUsers[log.Ip] = map[int]bool{}
+			}
+			ipUsers[log.Ip][log.UserId] = true
 		}
 		agg.Hours[log.CreatedAt/3600]++
 		if client := extractClientSoftware(log.Other); client != "" {
 			agg.Clients[client]++
+		}
+	}
+	for _, agg := range aggs {
+		agg.SharedIPs = map[string]int{}
+		for ip := range agg.Ips {
+			userCount := len(ipUsers[ip])
+			if userCount > 1 {
+				agg.SharedIPs[ip] = userCount
+			}
 		}
 	}
 
@@ -594,9 +610,22 @@ func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {
 
 	reasons := []string{}
 	score := 0
-	if len(ips) > 3 {
+	if len(ips) > 9 {
 		score += 3
-		reasons = append(reasons, fmt.Sprintf("单用户使用 IP 超过 3 个（%d 个）", len(ips)))
+		reasons = append(reasons, fmt.Sprintf("单用户使用 IP 超过 9 个（%d 个）", len(ips)))
+	}
+	maxSharedIpUserCount := 0
+	for _, userCount := range agg.SharedIPs {
+		if userCount > maxSharedIpUserCount {
+			maxSharedIpUserCount = userCount
+		}
+	}
+	if maxSharedIpUserCount >= 5 {
+		score += 3
+		reasons = append(reasons, fmt.Sprintf("同 IP 关联多个用户（最多 %d 个用户）", maxSharedIpUserCount))
+	} else if maxSharedIpUserCount >= 2 {
+		score += 1
+		reasons = append(reasons, fmt.Sprintf("同 IP 关联多个用户（最多 %d 个用户）", maxSharedIpUserCount))
 	}
 	if activeHours >= 20 {
 		score += 4
@@ -625,6 +654,7 @@ func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {
 		Username:           agg.Username,
 		RequestCount:       agg.Requests,
 		IpCount:            len(ips),
+		SharedIpUserCount:  maxSharedIpUserCount,
 		Ips:                ips,
 		ActiveHourCount:    activeHours,
 		MaxHourlyRequests:  maxHourlyRequests,

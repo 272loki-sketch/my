@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, DatePicker, Empty, Space, Table, Tag, Typography } from '@douyinfe/semi-ui';
-import { IllustrationNoResult, IllustrationNoResultDark } from '@douyinfe/semi-illustrations';
+import {
+  Button,
+  Card,
+  DatePicker,
+  Empty,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from '@douyinfe/semi-ui';
+import {
+  IllustrationNoResult,
+  IllustrationNoResultDark,
+} from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 import { API, showError, timestamp2string } from '../../helpers';
 
@@ -53,7 +65,11 @@ const SuspiciousUser = () => {
       title: t('风险分'),
       dataIndex: 'score',
       sorter: (a, b) => a.score - b.score,
-      render: (score) => <Tag color={score >= 5 ? 'red' : score >= 3 ? 'orange' : 'yellow'}>{score}</Tag>,
+      render: (score) => (
+        <Tag color={score >= 5 ? 'red' : score >= 3 ? 'orange' : 'yellow'}>
+          {score}
+        </Tag>
+      ),
     },
     {
       title: t('原因'),
@@ -61,7 +77,9 @@ const SuspiciousUser = () => {
       render: (reasons) => (
         <Space wrap>
           {(reasons || []).map((reason) => (
-            <Tag key={reason} color='red'>{reason}</Tag>
+            <Tag key={reason} color='red'>
+              {reason}
+            </Tag>
           ))}
         </Space>
       ),
@@ -76,8 +94,20 @@ const SuspiciousUser = () => {
       dataIndex: 'ips',
       render: (ips, record) => (
         <Space vertical align='start' spacing={2}>
-          <Text>{record.ip_count}</Text>
-          <Text type='tertiary' style={{ maxWidth: 260, wordBreak: 'break-word' }}>
+          <Space spacing={4}>
+            <Tag color={record.ip_count > 9 ? 'red' : 'white'}>
+              {record.ip_count}
+            </Tag>
+            {record.shared_ip_user_count > 1 && (
+              <Tag color='orange'>
+                {t('同IP用户')}: {record.shared_ip_user_count}
+              </Tag>
+            )}
+          </Space>
+          <Text
+            type='tertiary'
+            style={{ maxWidth: 260, wordBreak: 'break-word' }}
+          >
             {(ips || []).join(', ')}
           </Text>
         </Space>
@@ -96,7 +126,11 @@ const SuspiciousUser = () => {
     {
       title: t('客户端样本'),
       dataIndex: 'sample_client',
-      render: (text) => <Text style={{ maxWidth: 280, wordBreak: 'break-word' }}>{text || '-'}</Text>,
+      render: (text) => (
+        <Text style={{ maxWidth: 280, wordBreak: 'break-word' }}>
+          {text || '-'}
+        </Text>
+      ),
     },
     {
       title: t('时间范围'),
@@ -115,8 +149,12 @@ const SuspiciousUser = () => {
       <Card className='rounded-xl'>
         <Space className='mb-4' wrap>
           <DatePicker type='dateTimeRange' value={range} onChange={setRange} />
-          <Button type='primary' onClick={loadData} loading={loading}>{t('刷新')}</Button>
-          <Text type='tertiary'>{t('基于最近消费日志实时聚合，仅用于辅助人工审判。')}</Text>
+          <Button type='primary' onClick={loadData} loading={loading}>
+            {t('刷新')}
+          </Button>
+          <Text type='tertiary'>
+            {t('基于最近消费日志实时聚合，仅用于辅助人工审判。')}
+          </Text>
         </Space>
         <Table
           columns={columns}
@@ -127,8 +165,12 @@ const SuspiciousUser = () => {
           pagination={{ pageSize: 20 }}
           empty={
             <Empty
-              image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
-              darkModeImage={<IllustrationNoResultDark style={{ width: 150, height: 150 }} />}
+              image={
+                <IllustrationNoResult style={{ width: 150, height: 150 }} />
+              }
+              darkModeImage={
+                <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
+              }
               description={t('暂无可疑用户')}
               style={{ padding: 30 }}
             />

@@ -35,6 +35,7 @@ export const useUsersData = () => {
   const [searching, setSearching] = useState(false);
   const [groupOptions, setGroupOptions] = useState([]);
   const [userCount, setUserCount] = useState(0);
+  const [sortOptions, setSortOptions] = useState({ sort: 'id', order: 'desc' });
 
   // Modal states
   const [showAddUser, setShowAddUser] = useState(false);
@@ -47,6 +48,8 @@ export const useUsersData = () => {
   const formInitValues = {
     searchKeyword: '',
     searchGroup: '',
+    sortField: 'id',
+    sortOrder: 'desc',
   };
 
   // Form API reference
@@ -61,6 +64,11 @@ export const useUsersData = () => {
     };
   };
 
+  const buildSortQuery = (options = sortOptions) => {
+    if (!options.sort) return '';
+    return `&sort=${encodeURIComponent(options.sort)}&order=${encodeURIComponent(options.order || 'desc')}`;
+  };
+
   // Set user format with key field
   const setUserFormat = (users) => {
     for (let i = 0; i < users.length; i++) {
@@ -70,9 +78,15 @@ export const useUsersData = () => {
   };
 
   // Load users data
-  const loadUsers = async (startIdx, pageSize) => {
+  const loadUsers = async (
+    startIdx,
+    pageSize,
+    nextSortOptions = sortOptions,
+  ) => {
     setLoading(true);
-    const res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
+    const res = await API.get(
+      `/api/user/?p=${startIdx}&page_size=${pageSize}${buildSortQuery(nextSortOptions)}`,
+    );
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
@@ -91,6 +105,7 @@ export const useUsersData = () => {
     pageSize,
     searchKeyword = null,
     searchGroup = null,
+    nextSortOptions = sortOptions,
   ) => {
     // If no parameters passed, get values from form
     if (searchKeyword === null || searchGroup === null) {
@@ -101,12 +116,12 @@ export const useUsersData = () => {
 
     if (searchKeyword === '' && searchGroup === '') {
       // If keyword is blank, load files instead
-      await loadUsers(startIdx, pageSize);
+      await loadUsers(startIdx, pageSize, nextSortOptions);
       return;
     }
     setSearching(true);
     const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
+      `/api/user/search?keyword=${encodeURIComponent(searchKeyword)}&group=${encodeURIComponent(searchGroup)}&p=${startIdx}&page_size=${pageSize}${buildSortQuery(nextSortOptions)}`,
     );
     const { success, message, data } = res.data;
     if (success) {
@@ -193,9 +208,15 @@ export const useUsersData = () => {
     setActivePage(page);
     const { searchKeyword, searchGroup } = getFormValues();
     if (searchKeyword === '' && searchGroup === '') {
-      loadUsers(page, pageSize).then();
+      loadUsers(page, pageSize, sortOptions).then();
     } else {
-      searchUsers(page, pageSize, searchKeyword, searchGroup).then();
+      searchUsers(
+        page,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        sortOptions,
+      ).then();
     }
   };
 
@@ -204,7 +225,7 @@ export const useUsersData = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadUsers(activePage, size)
+    loadUsers(1, size, sortOptions)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -228,9 +249,35 @@ export const useUsersData = () => {
   const refresh = async (page = activePage) => {
     const { searchKeyword, searchGroup } = getFormValues();
     if (searchKeyword === '' && searchGroup === '') {
-      await loadUsers(page, pageSize);
+      await loadUsers(page, pageSize, sortOptions);
     } else {
-      await searchUsers(page, pageSize, searchKeyword, searchGroup);
+      await searchUsers(
+        page,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        sortOptions,
+      );
+    }
+  };
+
+  const handleSortChange = (sort, order) => {
+    const nextSortOptions = { sort, order };
+    setSortOptions(nextSortOptions);
+    formApi?.setValue('sortField', sort);
+    formApi?.setValue('sortOrder', order);
+    setActivePage(1);
+    const { searchKeyword, searchGroup } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '') {
+      loadUsers(1, pageSize, nextSortOptions).then();
+    } else {
+      searchUsers(
+        1,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        nextSortOptions,
+      ).then();
     }
   };
 
@@ -266,7 +313,7 @@ export const useUsersData = () => {
 
   // Initialize data on component mount
   useEffect(() => {
-    loadUsers(0, pageSize)
+    loadUsers(1, pageSize, sortOptions)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -283,6 +330,7 @@ export const useUsersData = () => {
     userCount,
     searching,
     groupOptions,
+    sortOptions,
 
     // Modal state
     showAddUser,
@@ -311,6 +359,7 @@ export const useUsersData = () => {
     handlePageSizeChange,
     handleRow,
     refresh,
+    handleSortChange,
     closeAddUser,
     closeEditUser,
     getFormValues,

@@ -195,6 +195,8 @@ func SetApiRouter(router *gin.Engine) {
 		performanceRoute.Use(middleware.RootAuth())
 		{
 			performanceRoute.GET("/stats", controller.GetPerformanceStats)
+			performanceRoute.GET("/database_backup", middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.DownloadSQLiteDatabaseBackup)
+			performanceRoute.POST("/database_backup/import", middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.ImportSQLiteDatabaseBackup)
 			performanceRoute.DELETE("/disk_cache", controller.ClearDiskCache)
 			performanceRoute.POST("/reset_stats", controller.ResetPerformanceStats)
 			performanceRoute.POST("/gc", controller.ForceGC)

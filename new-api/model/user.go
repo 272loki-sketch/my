@@ -51,6 +51,12 @@ type User struct {
 	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	RegisterIp       string         `json:"register_ip" gorm:"type:varchar(64);column:register_ip;index;default:''"`
+	IpCount          int            `json:"ip_count" gorm:"-"`
+}
+
+type UserSortOptions struct {
+	Sort  string
+	Order string
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -189,7 +195,7 @@ func GetMaxUserId() int {
 	return user.Id
 }
 
-func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err error) {
+func GetAllUsers(pageInfo *common.PageInfo, sortOptions UserSortOptions) (users []*User, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -209,11 +215,12 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	}
 
 	// Get paginated users within same transaction
-	err = tx.Unscoped().Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password").Find(&users).Error
+	err = tx.Unscoped().Order(buildUserOrder(sortOptions)).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password").Find(&users).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
+	fillUsersIpCount(users)
 
 	// Commit transaction
 	if err = tx.Commit().Error; err != nil {
@@ -223,7 +230,7 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, int64, error) {
+func SearchUsers(keyword string, group string, startIdx int, num int, sortOptions UserSortOptions) ([]*User, int64, error) {
 	var users []*User
 	var total int64
 	var err error
@@ -276,11 +283,12 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	}
 
 	// 获取分页数据
-	err = query.Omit("password").Order("id desc").Limit(num).Offset(startIdx).Find(&users).Error
+	err = query.Omit("password").Order(buildUserOrder(sortOptions)).Limit(num).Offset(startIdx).Find(&users).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
+	fillUsersIpCount(users)
 
 	// 提交事务
 	if err = tx.Commit().Error; err != nil {
@@ -288,6 +296,61 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	}
 
 	return users, total, nil
+}
+
+func buildUserOrder(sortOptions UserSortOptions) string {
+	direction := "desc"
+	if strings.EqualFold(sortOptions.Order, "asc") || strings.EqualFold(sortOptions.Order, "ascend") {
+		direction = "asc"
+	}
+
+	switch sortOptions.Sort {
+	case "id":
+		return "id " + direction
+	case "quota":
+		return "quota " + direction + ", id desc"
+	case "register_ip":
+		return "register_ip " + direction + ", id desc"
+	default:
+		return "id desc"
+	}
+}
+
+func fillUsersIpCount(users []*User) {
+	if len(users) == 0 {
+		return
+	}
+	userIDs := make([]int, 0, len(users))
+	userMap := make(map[int]*User, len(users))
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		userIDs = append(userIDs, user.Id)
+		userMap[user.Id] = user
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	type userIpCount struct {
+		UserId  int
+		IpCount int
+	}
+	var rows []userIpCount
+	if err := LOG_DB.Model(&Log{}).
+		Select("user_id, COUNT(DISTINCT ip) AS ip_count").
+		Where("type = ? AND user_id IN ? AND ip <> ''", LogTypeConsume, userIDs).
+		Group("user_id").
+		Scan(&rows).Error; err != nil {
+		common.SysError("failed to fill users ip count: " + err.Error())
+		return
+	}
+	for _, row := range rows {
+		if user, ok := userMap[row.UserId]; ok {
+			user.IpCount = row.IpCount
+		}
+	}
 }
 
 func GetUserById(id int, selectAll bool) (*User, error) {

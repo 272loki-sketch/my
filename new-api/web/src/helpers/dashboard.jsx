@@ -389,23 +389,39 @@ export const generateChartTimePoints = (
 };
 
 // ========== 用户维度数据处理 ==========
-export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
-  const userQuotaTotal = new Map();
+const aggregateUserRanking = (data, field, limit) => {
+  const userTotal = new Map();
   data.forEach((item) => {
-    const prev = userQuotaTotal.get(item.username) || 0;
-    userQuotaTotal.set(item.username, prev + item.quota);
+    const username = item.username || '-';
+    const prev = userTotal.get(username) || 0;
+    userTotal.set(username, prev + (item[field] || 0));
   });
 
-  const sorted = Array.from(userQuotaTotal.entries()).sort(
-    (a, b) => b[1] - a[1],
+  return Array.from(userTotal.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([username, value]) => ({
+      User: username,
+      Value: value,
+    }));
+};
+
+export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
+  const rankingData = aggregateUserRanking(data, 'quota', limit).map(
+    (item) => ({
+      User: item.User,
+      Quota: item.Value,
+    }),
   );
+  const callRankingData = aggregateUserRanking(data, 'count', limit).map(
+    (item) => ({
+      User: item.User,
+      Count: item.Value,
+    }),
+  );
+  const sorted = rankingData.map((item) => [item.User, item.Quota]);
   const topUsers = sorted.slice(0, limit).map(([u]) => u);
   const topUserSet = new Set(topUsers);
-
-  const rankingData = sorted.slice(0, limit).map(([username, quota]) => ({
-    User: username,
-    Quota: quota,
-  }));
 
   const showYear = isDataCrossYear(data.map((item) => item.created_at));
 
@@ -440,5 +456,29 @@ export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
     });
   });
 
-  return { rankingData, trendData, topUsers };
+  return { rankingData, callRankingData, trendData, topUsers };
+};
+
+export const processTodayUserData = (data, limit = 10) => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000);
+  const todayData = data.filter(
+    (item) => item.created_at >= todayStartTimestamp,
+  );
+
+  return {
+    quotaRankingData: aggregateUserRanking(todayData, 'quota', limit).map(
+      (item) => ({
+        User: item.User,
+        Quota: item.Value,
+      }),
+    ),
+    callRankingData: aggregateUserRanking(todayData, 'count', limit).map(
+      (item) => ({
+        User: item.User,
+        Count: item.Value,
+      }),
+    ),
+  };
 };

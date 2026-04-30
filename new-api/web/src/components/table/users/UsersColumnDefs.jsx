@@ -349,14 +349,32 @@ export const getUsersColumns = ({
       title: t('注册IP'),
       dataIndex: 'register_ip',
       render: (text) => {
+        const { Paragraph } = Typography;
         return text ? (
-          <Tag color='white' shape='circle' className='!text-xs'>
+          <Paragraph
+            copyable={{ content: text }}
+            style={{ margin: 0, maxWidth: 150 }}
+            ellipsis={{ rows: 1, showTooltip: true }}
+          >
             {text}
-          </Tag>
+          </Paragraph>
         ) : (
           <span style={{ color: 'var(--semi-color-text-2)' }}>-</span>
         );
       },
+    },
+    {
+      title: t('使用IP数'),
+      dataIndex: 'ip_count',
+      render: (text) => (
+        <Tag
+          color={text > 9 ? 'red' : text > 3 ? 'orange' : 'white'}
+          shape='circle'
+          className='!text-xs'
+        >
+          {renderNumber(text || 0)}
+        </Tag>
+      ),
     },
     {
       title: t('邀请信息'),

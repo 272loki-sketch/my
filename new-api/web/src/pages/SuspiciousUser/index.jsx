@@ -4,6 +4,7 @@ import {
   Card,
   DatePicker,
   Empty,
+  Input,
   Space,
   Table,
   Tag,
@@ -14,7 +15,7 @@ import {
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
-import { API, showError, timestamp2string } from '../../helpers';
+import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -23,6 +24,7 @@ const SuspiciousUser = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]);
   const [range, setRange] = useState([]);
+  const [savingRemarkUserId, setSavingRemarkUserId] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -49,6 +51,29 @@ const SuspiciousUser = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const saveRemark = async (userId, remark) => {
+    setSavingRemarkUserId(userId);
+    try {
+      const res = await API.put(`/api/log/suspicious/${userId}/remark`, {
+        remark,
+      });
+      if (res.data.success) {
+        setData((items) =>
+          items.map((item) =>
+            item.user_id === userId ? { ...item, remark } : item,
+          ),
+        );
+        showSuccess(t('备注已保存'));
+      } else {
+        showError(res.data.message || t('保存失败'));
+      }
+    } catch (error) {
+      showError(error.message || t('保存失败'));
+    } finally {
+      setSavingRemarkUserId(null);
+    }
+  };
 
   const columns = [
     {
@@ -82,6 +107,28 @@ const SuspiciousUser = () => {
             </Tag>
           ))}
         </Space>
+      ),
+    },
+    {
+      title: t('备注'),
+      dataIndex: 'remark',
+      render: (text, record) => (
+        <Input
+          size='small'
+          defaultValue={text || ''}
+          placeholder={t('添加备注')}
+          disabled={savingRemarkUserId === record.user_id}
+          style={{ width: 180 }}
+          onBlur={(event) => {
+            const remark = event.target.value.trim();
+            if (remark !== (record.remark || '')) {
+              saveRemark(record.user_id, remark);
+            }
+          }}
+          onEnterPress={(event) => {
+            event.currentTarget.blur();
+          }}
+        />
       ),
     },
     {

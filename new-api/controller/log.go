@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -45,6 +46,30 @@ func GetSuspiciousUsers(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, users)
+}
+
+func UpdateSuspiciousUserRemark(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Param("user_id"))
+	if err != nil || userId <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "用户 ID 无效",
+		})
+		return
+	}
+	var req struct {
+		Remark string `json:"remark"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	remark := strings.TrimSpace(req.Remark)
+	if err := model.UpdateSuspiciousUserRemark(userId, remark); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"remark": remark})
 }
 
 func GetUserLogs(c *gin.Context) {

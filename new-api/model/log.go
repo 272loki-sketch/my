@@ -445,6 +445,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 type SuspiciousUser struct {
 	UserId             int      `json:"user_id"`
 	Username           string   `json:"username"`
+	Remark             string   `json:"remark"`
 	RequestCount       int      `json:"request_count"`
 	IpCount            int      `json:"ip_count"`
 	SharedIpUserCount  int      `json:"shared_ip_user_count"`
@@ -469,6 +470,12 @@ type suspiciousUserAgg struct {
 	Hours     map[int64]int
 	Clients   map[string]int
 	SharedIPs map[string]int
+}
+
+type SuspiciousUserNote struct {
+	UserId    int    `json:"user_id" gorm:"primaryKey;column:user_id"`
+	Remark    string `json:"remark" gorm:"type:varchar(500);default:''"`
+	UpdatedAt int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, limit int) ([]SuspiciousUser, error) {
@@ -564,7 +571,45 @@ func GetSuspiciousUsers(startTimestamp int64, endTimestamp int64, minScore int, 
 	if len(result) > limit {
 		result = result[:limit]
 	}
+	fillSuspiciousUserRemarks(result)
 	return result, nil
+}
+
+func fillSuspiciousUserRemarks(users []SuspiciousUser) {
+	if len(users) == 0 {
+		return
+	}
+	userIDs := make([]int, 0, len(users))
+	for _, user := range users {
+		userIDs = append(userIDs, user.UserId)
+	}
+	var notes []SuspiciousUserNote
+	if err := DB.Where("user_id IN ?", userIDs).Find(&notes).Error; err != nil {
+		common.SysError("failed to load suspicious user notes: " + err.Error())
+		return
+	}
+	noteMap := make(map[int]string, len(notes))
+	for _, note := range notes {
+		noteMap[note.UserId] = note.Remark
+	}
+	for i := range users {
+		users[i].Remark = noteMap[users[i].UserId]
+	}
+}
+
+func UpdateSuspiciousUserRemark(userId int, remark string) error {
+	if userId <= 0 {
+		return errors.New("用户 ID 无效")
+	}
+	if len([]rune(remark)) > 500 {
+		return errors.New("备注不能超过 500 个字符")
+	}
+	note := SuspiciousUserNote{
+		UserId:    userId,
+		Remark:    remark,
+		UpdatedAt: common.GetTimestamp(),
+	}
+	return DB.Save(&note).Error
 }
 
 func getTrustedRiskUserIDs() map[int]bool {
@@ -622,10 +667,14 @@ func buildSuspiciousUser(agg *suspiciousUserAgg) SuspiciousUser {
 	}
 	if maxSharedIpUserCount >= 5 {
 		score += 3
-		reasons = append(reasons, fmt.Sprintf("同 IP 关联多个用户（最多 %d 个用户）", maxSharedIpUserCount))
+		reasons = append(reasons, fmt.Sprintf("疑似云酒馆（付费云酒馆：同 IP 关联多个用户，最多 %d 个用户）", maxSharedIpUserCount))
 	} else if maxSharedIpUserCount >= 2 {
 		score += 1
-		reasons = append(reasons, fmt.Sprintf("同 IP 关联多个用户（最多 %d 个用户）", maxSharedIpUserCount))
+		reasons = append(reasons, fmt.Sprintf("疑似云酒馆（付费云酒馆：同 IP 关联多个用户，最多 %d 个用户）", maxSharedIpUserCount))
+	}
+	if len(ips) == 1 && maxSharedIpUserCount <= 1 && (activeHours >= 6 || agg.Requests >= 120) {
+		score += 2
+		reasons = append(reasons, fmt.Sprintf("疑似云酒馆（自部署云酒馆：长期固定单 IP 使用，%d 个活跃小时，%d 次请求）", activeHours, agg.Requests))
 	}
 	if activeHours >= 20 {
 		score += 4

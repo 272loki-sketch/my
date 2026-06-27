@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -58,8 +59,19 @@ type textQuotaSummary struct {
 	SmallRequestSurcharge    int
 }
 
-func applySmallRequestSurcharge(summary *textQuotaSummary, extraContent *[]string) {
+func applySmallRequestSurcharge(summary *textQuotaSummary, extraContent *[]string, relayMode int) {
 	if summary.TotalTokens == 0 {
+		return
+	}
+	if strings.HasPrefix(summary.ModelName, "gpt-image") {
+		return
+	}
+	// Skip small request surcharge for non-text models (image generation, embeddings, rerank, audio)
+	switch relayMode {
+	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits,
+		relayconstant.RelayModeEmbeddings,
+		relayconstant.RelayModeRerank,
+		relayconstant.RelayModeAudioSpeech, relayconstant.RelayModeAudioTranscription, relayconstant.RelayModeAudioTranslation:
 		return
 	}
 	if !operation_setting.SmallRequestSurchargeEnabled {
@@ -388,7 +400,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if summary.ImageGenerationCallPrice > 0 {
 		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
 	}
-	applySmallRequestSurcharge(&summary, &extraContent)
+	applySmallRequestSurcharge(&summary, &extraContent, relayInfo.RelayMode)
 
 	if summary.TotalTokens == 0 {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")

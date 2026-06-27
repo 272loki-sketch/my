@@ -35,3 +35,15 @@ data/
 .test
 token_estimator_test.go
 skills-lock.json
+
+# Backup files
+*.bak
+*.bak.*
+**/*.bak
+**/*.bak-*
+
+# Compiled binary (local builds)
+new-api-compiled
+
+# Compose backups
+docker-compose.yml.bak*

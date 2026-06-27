@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -199,6 +200,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 }
 
 func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
+	// Explicitly mark as embedding mode: Path2RelayMode maps /v1beta/models/* to RelayModeGemini,
+	// but this is an embedding request, so override it for correct billing behavior.
+	info.RelayMode = relayconstant.RelayModeEmbeddings
 	info.InitChannelMeta(c)
 
 	isBatch := strings.HasSuffix(c.Request.URL.Path, "batchEmbedContents")

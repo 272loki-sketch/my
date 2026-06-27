@@ -1096,6 +1096,10 @@ func TopUp(c *gin.Context) {
 	}
 	quota, err := model.Redeem(req.Key, id)
 	if err != nil {
+		if errors.Is(err, model.ErrRedeemAlreadyUsedByUser) {
+			common.ApiErrorMsg(c, "你已经使用过该兑换码")
+			return
+		}
 		if errors.Is(err, model.ErrRedeemFailed) {
 			common.ApiErrorI18n(c, i18n.MsgRedeemFailed)
 			return

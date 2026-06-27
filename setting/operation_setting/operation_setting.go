@@ -20,7 +20,7 @@ var AutomaticDisableKeywords = []string{
 
 var AutoBanEnabled = false
 var AutoBanHeaderKeywords = []string{"tavo"}
-var AutoBanUserWhitelist = []int{}
+var AutoBanUserWhitelist = []string{}
 var HoneypotModels = []string{"claude opus10"}
 var HoneypotResponse = "baka"
 var SmallRequestSurchargeEnabled = true
@@ -59,30 +59,36 @@ func AutoBanHeaderKeywordsFromString(s string) {
 }
 
 func AutoBanUserWhitelistToString() string {
-	items := make([]string, 0, len(AutoBanUserWhitelist))
-	for _, id := range AutoBanUserWhitelist {
-		items = append(items, strconv.Itoa(id))
-	}
-	return strings.Join(items, "\n")
+	return strings.Join(AutoBanUserWhitelist, "\n")
 }
 
 func AutoBanUserWhitelistFromString(s string) {
-	AutoBanUserWhitelist = []int{}
+	AutoBanUserWhitelist = []string{}
 	parts := strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
 	})
 	for _, part := range parts {
-		id, err := strconv.Atoi(strings.TrimSpace(part))
-		if err == nil && id > 0 {
-			AutoBanUserWhitelist = append(AutoBanUserWhitelist, id)
+		item := strings.TrimSpace(part)
+		if item != "" {
+			AutoBanUserWhitelist = append(AutoBanUserWhitelist, strings.ToLower(item))
 		}
 	}
 }
 
-func IsAutoBanWhitelisted(userId int) bool {
-	for _, id := range AutoBanUserWhitelist {
-		if id == userId {
+func IsAutoBanWhitelisted(userId int, identifiers ...string) bool {
+	idString := strconv.Itoa(userId)
+	for _, item := range AutoBanUserWhitelist {
+		item = strings.TrimSpace(strings.ToLower(item))
+		if item == "" {
+			continue
+		}
+		if item == idString {
 			return true
+		}
+		for _, identifier := range identifiers {
+			if item == strings.TrimSpace(strings.ToLower(identifier)) {
+				return true
+			}
 		}
 	}
 	return false

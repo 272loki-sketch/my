@@ -46,7 +46,8 @@ func requestModelName(request dto.Request) string {
 	}
 }
 
-func relayHoneypotResponse(c *gin.Context, relayFormat types.RelayFormat, modelName string) bool {
+func relayHoneypotResponse(c *gin.Context, relayFormat types.RelayFormat, request dto.Request) bool {
+	modelName := requestModelName(request)
 	if !operation_setting.IsHoneypotModel(modelName) {
 		return false
 	}
@@ -56,17 +57,69 @@ func relayHoneypotResponse(c *gin.Context, relayFormat types.RelayFormat, modelN
 	}
 	now := time.Now().Unix()
 	usage := dto.Usage{PromptTokens: 1, CompletionTokens: service.EstimateTokenByModel(modelName, content), TotalTokens: 1 + service.EstimateTokenByModel(modelName, content)}
+	isStream := request.IsStream(c)
+
+	recordConsume := func() {
+		model.RecordConsumeLog(c, c.GetInt("id"), model.RecordConsumeLogParams{ModelName: modelName, TokenName: c.GetString("token_name"), TokenId: c.GetInt("token_id"), Content: "honeypot model call", CompletionTokens: usage.CompletionTokens, PromptTokens: usage.PromptTokens, Quota: 0, IsStream: isStream, Group: common.GetContextKeyString(c, constant.ContextKeyUsingGroup), Other: map[string]interface{}{"honeypot": true}})
+	}
+
+	if !isStream {
+		switch relayFormat {
+		case types.RelayFormatClaude:
+			c.JSON(http.StatusOK, dto.ClaudeResponse{Id: fmt.Sprintf("msg-honeypot-%d", now), Type: "message", Role: "assistant", Model: modelName, Content: []dto.ClaudeMediaMessage{{Type: "text", Text: &content}}, StopReason: "end_turn", Usage: &dto.ClaudeUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens}})
+		case types.RelayFormatOpenAIResponses:
+			textBytes, _ := json.Marshal(content)
+			statusBytes := json.RawMessage(`"completed"`)
+			c.JSON(http.StatusOK, gin.H{"id": fmt.Sprintf("resp_honeypot_%d", now), "object": "response", "created_at": now, "status": statusBytes, "model": modelName, "output": []gin.H{{"type": "message", "role": "assistant", "content": []gin.H{{"type": "output_text", "text": string(textBytes)}}}}, "usage": usage})
+		default:
+			c.JSON(http.StatusOK, dto.OpenAITextResponse{Id: fmt.Sprintf("chatcmpl-honeypot-%d", now), Object: "chat.completion", Created: now, Model: modelName, Choices: []dto.OpenAITextResponseChoice{{Index: 0, Message: dto.Message{Role: "assistant", Content: content}, FinishReason: "stop"}}, Usage: usage})
+		}
+		recordConsume()
+		return true
+	}
+
+	helper.SetEventStreamHeaders(c)
 	switch relayFormat {
 	case types.RelayFormatClaude:
-		c.JSON(http.StatusOK, dto.ClaudeResponse{Id: fmt.Sprintf("msg-honeypot-%d", now), Type: "message", Role: "assistant", Model: modelName, Content: []dto.ClaudeMediaMessage{{Type: "text", Text: &content}}, StopReason: "end_turn", Usage: &dto.ClaudeUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens}})
+		msgId := fmt.Sprintf("msg-honeypot-%d", now)
+		msg := &dto.ClaudeMediaMessage{Id: msgId, Model: modelName, Type: "message", Role: "assistant", Usage: &dto.ClaudeUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens}}
+		msg.SetContent(make([]any, 0))
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "message_start", Message: msg})
+		idx0 := 0
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "content_block_start", Index: &idx0, ContentBlock: &dto.ClaudeMediaMessage{Type: "text", Text: common.GetPointer("")}})
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "content_block_delta", Index: &idx0, Delta: &dto.ClaudeMediaMessage{Type: "text_delta", Text: common.GetPointer(content)}})
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "content_block_stop", Index: &idx0})
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "message_delta", Delta: &dto.ClaudeMediaMessage{StopReason: common.GetPointer("end_turn")}, Usage: &dto.ClaudeUsage{OutputTokens: usage.CompletionTokens}})
+		helper.ClaudeData(c, dto.ClaudeResponse{Type: "message_stop"})
 	case types.RelayFormatOpenAIResponses:
-		textBytes, _ := json.Marshal(content)
-		statusBytes := json.RawMessage(`"completed"`)
-		c.JSON(http.StatusOK, gin.H{"id": fmt.Sprintf("resp_honeypot_%d", now), "object": "response", "created_at": now, "status": statusBytes, "model": modelName, "output": []gin.H{{"type": "message", "role": "assistant", "content": []gin.H{{"type": "output_text", "text": string(textBytes)}}}}, "usage": usage})
+		respId := fmt.Sprintf("resp_honeypot_%d", now)
+		itemId := fmt.Sprintf("msg_honeypot_%d", now)
+		sendRespEvent := func(eventType string, payload gin.H) {
+			data, _ := common.Marshal(payload)
+			c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", eventType)})
+			c.Render(-1, common.CustomEvent{Data: "data: " + string(data)})
+			_ = helper.FlushWriter(c)
+		}
+		sendRespEvent("response.created", gin.H{"type": "response.created", "response": gin.H{"id": respId, "object": "response", "created_at": now, "model": modelName, "status": "in_progress", "output": []gin.H{}}})
+		sendRespEvent("response.output_item.added", gin.H{"type": "response.output_item.added", "output_index": 0, "item": gin.H{"id": itemId, "type": "message", "status": "in_progress", "role": "assistant", "content": []gin.H{}}})
+		sendRespEvent("response.content_part.added", gin.H{"type": "response.content_part.added", "output_index": 0, "content_index": 0, "item_id": itemId, "part": gin.H{"type": "output_text", "text": "", "annotations": []gin.H{}}})
+		sendRespEvent("response.output_text.delta", gin.H{"type": "response.output_text.delta", "output_index": 0, "content_index": 0, "item_id": itemId, "delta": content})
+		sendRespEvent("response.output_text.done", gin.H{"type": "response.output_text.done", "output_index": 0, "content_index": 0, "item_id": itemId, "text": content})
+		sendRespEvent("response.content_part.done", gin.H{"type": "response.content_part.done", "output_index": 0, "content_index": 0, "item_id": itemId, "part": gin.H{"type": "output_text", "text": content, "annotations": []gin.H{}}})
+		doneItem := gin.H{"id": itemId, "type": "message", "status": "completed", "role": "assistant", "content": []gin.H{{"type": "output_text", "text": content, "annotations": []gin.H{}}}}
+		sendRespEvent("response.output_item.done", gin.H{"type": "response.output_item.done", "output_index": 0, "item": doneItem})
+		sendRespEvent("response.completed", gin.H{"type": "response.completed", "response": gin.H{"id": respId, "object": "response", "created_at": now, "model": modelName, "status": "completed", "output": []gin.H{doneItem}, "usage": usage}})
 	default:
-		c.JSON(http.StatusOK, dto.OpenAITextResponse{Id: fmt.Sprintf("chatcmpl-honeypot-%d", now), Object: "chat.completion", Created: now, Model: modelName, Choices: []dto.OpenAITextResponseChoice{{Index: 0, Message: dto.Message{Role: "assistant", Content: content}, FinishReason: "stop"}}, Usage: usage})
+		chunkId := fmt.Sprintf("chatcmpl-honeypot-%d", now)
+		helper.ObjectData(c, &dto.ChatCompletionsStreamResponse{Id: chunkId, Object: "chat.completion.chunk", Created: now, Model: modelName, Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Role: "assistant"}}}})
+		contentChoice := dto.ChatCompletionsStreamResponseChoice{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{}}
+		contentChoice.Delta.SetContentString(content)
+		helper.ObjectData(c, &dto.ChatCompletionsStreamResponse{Id: chunkId, Object: "chat.completion.chunk", Created: now, Model: modelName, Choices: []dto.ChatCompletionsStreamResponseChoice{contentChoice}})
+		stop := "stop"
+		helper.ObjectData(c, &dto.ChatCompletionsStreamResponse{Id: chunkId, Object: "chat.completion.chunk", Created: now, Model: modelName, Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{}, FinishReason: &stop}}, Usage: &usage})
+		helper.Done(c)
 	}
-	model.RecordConsumeLog(c, c.GetInt("id"), model.RecordConsumeLogParams{ModelName: modelName, TokenName: c.GetString("token_name"), TokenId: c.GetInt("token_id"), Content: "蜜罐模型命中", CompletionTokens: usage.CompletionTokens, PromptTokens: usage.PromptTokens, Quota: 0, IsStream: false, Group: common.GetContextKeyString(c, constant.ContextKeyUsingGroup), Other: map[string]interface{}{"honeypot": true}})
+	recordConsume()
 	return true
 }
 
@@ -154,7 +207,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		return
 	}
-	if relayHoneypotResponse(c, relayFormat, requestModelName(request)) {
+	if relayHoneypotResponse(c, relayFormat, request) {
 		return
 	}
 

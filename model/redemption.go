@@ -28,6 +28,32 @@ type Redemption struct {
 	RedeemCount  int            `json:"redeem_count" gorm:"default:0"`
 }
 
+
+type RedemptionUsage struct {
+	Id           int   `json:"id" gorm:"primaryKey;autoIncrement"`
+	RedemptionId int   `json:"redemption_id" gorm:"index:idx_redemption_user,unique"`
+	UserId       int   `json:"user_id" gorm:"index:idx_redemption_user,unique"`
+	CreatedTime  int64 `json:"created_time" gorm:"bigint"`
+}
+
+func HasUserRedeemedCode(tx *gorm.DB, redemptionId int, userId int) (bool, error) {
+	var count int64
+	err := tx.Model(&RedemptionUsage{}).Where("redemption_id = ? AND user_id = ?", redemptionId, userId).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func RecordRedemptionUsage(tx *gorm.DB, redemptionId int, userId int) error {
+	usage := RedemptionUsage{
+		RedemptionId: redemptionId,
+		UserId:       userId,
+		CreatedTime:  common.GetTimestamp(),
+	}
+	return tx.Create(&usage).Error
+}
+
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	// 开始事务
 	tx := DB.Begin()
@@ -136,6 +162,14 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if redemption.MaxRedeems <= 0 {
 			redemption.MaxRedeems = 1
 		}
+		// Check if this user has already redeemed this code
+		alreadyRedeemed, checkErr := HasUserRedeemedCode(tx, redemption.Id, userId)
+		if checkErr != nil {
+			return checkErr
+		}
+		if alreadyRedeemed {
+			return errors.New("你已经使用过该兑换码")
+		}
 		if redemption.Status != common.RedemptionCodeStatusEnabled || redemption.RedeemCount >= redemption.MaxRedeems {
 			return errors.New("该兑换码已被使用")
 		}
@@ -152,10 +186,17 @@ func Redeem(key string, userId int) (quota int, err error) {
 			redemption.Status = common.RedemptionCodeStatusUsed
 		}
 		redemption.UsedUserId = userId
+		// Record that this user has redeemed this code
+		if err := RecordRedemptionUsage(tx, redemption.Id, userId); err != nil {
+			return err
+		}
 		err = tx.Save(redemption).Error
 		return err
 	})
 	if err != nil {
+		if err.Error() == "你已经使用过该兑换码" {
+			return 0, ErrRedeemAlreadyUsedByUser
+		}
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}

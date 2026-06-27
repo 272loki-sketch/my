@@ -209,7 +209,7 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
 		}
 		databaseRoute := apiRouter.Group("/database")
-		databaseRoute.Use(middleware.RootAuth())
+		databaseRoute.Use(middleware.RootAuthSessionOnly())
 		{
 			databaseRoute.GET("/export", controller.ExportDatabase)
 			databaseRoute.POST("/import", controller.ImportDatabase)

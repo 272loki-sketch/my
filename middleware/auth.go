@@ -190,6 +190,60 @@ func RootAuth() func(c *gin.Context) {
 	}
 }
 
+// RootAuthSessionOnly is like RootAuth but does not require the New-Api-User header.
+// Used for file download endpoints where custom headers cannot be sent.
+func RootAuthSessionOnly() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		authHelperSessionOnly(c, common.RoleRootUser)
+	}
+}
+func authHelperSessionOnly(c *gin.Context, minRole int) {
+	session := sessions.Default(c)
+	username := session.Get("username")
+	role := session.Get("role")
+	id := session.Get("id")
+	status := session.Get("status")
+	if username == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
+		})
+		c.Abort()
+		return
+	}
+	if status.(int) == common.UserStatusDisabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+		})
+		c.Abort()
+		return
+	}
+	if role.(int) < minRole {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+		})
+		c.Abort()
+		return
+	}
+	if !validUserInfo(username.(string), role.(int)) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
+		})
+		c.Abort()
+		return
+	}
+	c.Set("username", username)
+	c.Set("role", role)
+	c.Set("id", id)
+	c.Set("group", session.Get("group"))
+	c.Set("user_group", session.Get("group"))
+	c.Next()
+}
+
+
 func WssAuth(c *gin.Context) {
 
 }
@@ -382,16 +436,23 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		if operation_setting.AutoBanEnabled && !operation_setting.IsAutoBanWhitelisted(token.UserId) && requestMatchesAutoBan(c) {
-			if err := model.DB.Model(&model.User{}).Where("id = ?", token.UserId).Update("status", common.UserStatusDisabled).Error; err != nil {
-				common.SysLog(fmt.Sprintf("failed to auto ban user %d: %s", token.UserId, err.Error()))
-			} else {
-				_ = model.InvalidateUserCache(token.UserId)
-				_ = model.InvalidateUserTokensCache(token.UserId)
-				model.RecordLog(token.UserId, model.LogTypeManage, "自动封禁：请求头或客户端命中自动封禁规则")
+		matched, matchDetail := requestMatchesAutoBan(c)
+		if operation_setting.AutoBanEnabled && matched {
+			fullUser, userErr := model.GetUserById(token.UserId, false)
+			if userErr != nil {
+				common.SysLog(fmt.Sprintf("failed to load user %d for auto ban whitelist: %s", token.UserId, userErr.Error()))
 			}
-			abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
-			return
+			if userCache.Role < common.RoleAdminUser && (fullUser == nil || !operation_setting.IsAutoBanWhitelisted(token.UserId, fullUser.Username, fullUser.DisplayName, fullUser.Email, fullUser.DiscordId)) {
+				if err := model.DB.Model(&model.User{}).Where("id = ?", token.UserId).Update("status", common.UserStatusDisabled).Error; err != nil {
+					common.SysLog(fmt.Sprintf("failed to auto ban user %d: %s", token.UserId, err.Error()))
+				} else {
+					_ = model.InvalidateUserCache(token.UserId)
+					_ = model.InvalidateUserTokensCache(token.UserId)
+					model.RecordLog(token.UserId, model.LogTypeManage, fmt.Sprintf("自动封禁：%s", matchDetail))
+				}
+				abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
+				return
+			}
 		}
 
 		userCache.WriteContext(c)
@@ -423,11 +484,12 @@ func TokenAuth() func(c *gin.Context) {
 	}
 }
 
-func requestMatchesAutoBan(c *gin.Context) bool {
+func requestMatchesAutoBan(c *gin.Context) (bool, string) {
 	if len(operation_setting.AutoBanHeaderKeywords) == 0 {
-		return false
+		return false, ""
 	}
-	parts := []string{c.Request.UserAgent()}
+	userAgent := c.Request.UserAgent()
+	parts := []string{userAgent}
 	for key, values := range c.Request.Header {
 		parts = append(parts, key)
 		parts = append(parts, values...)
@@ -436,10 +498,26 @@ func requestMatchesAutoBan(c *gin.Context) bool {
 	for _, keyword := range operation_setting.AutoBanHeaderKeywords {
 		keyword = strings.TrimSpace(strings.ToLower(keyword))
 		if keyword != "" && strings.Contains(haystack, keyword) {
-			return true
+			matchedIn := ""
+			if strings.Contains(strings.ToLower(userAgent), keyword) {
+				matchedIn = fmt.Sprintf("User-Agent: %s", userAgent)
+			} else {
+				for key, values := range c.Request.Header {
+					for _, value := range values {
+						if strings.Contains(strings.ToLower(key), keyword) || strings.Contains(strings.ToLower(value), keyword) {
+							matchedIn = fmt.Sprintf("Header [%s]: %s", key, value)
+							break
+						}
+					}
+					if matchedIn != "" {
+						break
+					}
+				}
+			}
+			return true, fmt.Sprintf("关键词: %s, 命中位置: %s", keyword, matchedIn)
 		}
 	}
-	return false
+	return false, ""
 }
 
 func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) error {

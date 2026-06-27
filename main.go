@@ -182,9 +182,10 @@ func main() {
 		MaxAge:   2592000, // 30 days
 		HttpOnly: true,
 		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 	server.Use(sessions.Sessions("session", store))
+	server.Use(middleware.RecoverBadSession())
 
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()

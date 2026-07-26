@@ -99,7 +99,10 @@ func startCodexOAuthWithChannelID(c *gin.Context, channelID int) {
 	session.Set(codexOAuthSessionKey(channelID, "state"), flow.State)
 	session.Set(codexOAuthSessionKey(channelID, "verifier"), flow.Verifier)
 	session.Set(codexOAuthSessionKey(channelID, "created_at"), time.Now().Unix())
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -210,7 +213,9 @@ func completeCodexOAuthWithChannelID(c *gin.Context, channelID int) {
 	session.Delete(codexOAuthSessionKey(channelID, "state"))
 	session.Delete(codexOAuthSessionKey(channelID, "verifier"))
 	session.Delete(codexOAuthSessionKey(channelID, "created_at"))
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		common.SysError(fmt.Sprintf("failed to clear codex oauth session: channel_id=%d, error=%v", channelID, err))
+	}
 
 	if channelID > 0 {
 		if err := model.DB.Model(&model.Channel{}).Where("id = ?", channelID).Update("key", string(encoded)).Error; err != nil {

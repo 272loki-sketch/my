@@ -105,7 +105,9 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		ReturnUrl:      returnUrl,
 	})
 	if err != nil {
-		_ = model.ExpireSubscriptionOrder(tradeNo, model.PaymentProviderEpay)
+		if expireErr := model.ExpireSubscriptionOrder(tradeNo, model.PaymentProviderEpay); expireErr != nil {
+			common.SysError(fmt.Sprintf("failed to expire subscription order: trade_no=%s, error=%v", tradeNo, expireErr))
+		}
 		common.ApiErrorMsg(c, "拉起支付失败")
 		return
 	}

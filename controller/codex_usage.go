@@ -90,10 +90,15 @@ func GetCodexChannelUsage(c *gin.Context) {
 			}
 
 			encoded, encErr := common.Marshal(oauthKey)
-			if encErr == nil {
-				_ = model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", string(encoded)).Error
-				model.InitChannelCache()
-				service.ResetProxyClientCache()
+			if encErr != nil {
+				common.SysError(fmt.Sprintf("failed to encode refreshed codex credential: channel_id=%d, error=%v", ch.Id, encErr))
+			} else {
+				if updateErr := model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", string(encoded)).Error; updateErr != nil {
+					common.SysError(fmt.Sprintf("failed to persist refreshed codex credential: channel_id=%d, error=%v", ch.Id, updateErr))
+				} else {
+					model.InitChannelCache()
+					service.ResetProxyClientCache()
+				}
 			}
 
 			ctx2, cancel2 := context.WithTimeout(c.Request.Context(), 15*time.Second)

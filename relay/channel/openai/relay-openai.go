@@ -527,11 +527,15 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 	}
 
 	if usage.TotalTokens != 0 {
-		_ = preConsumeUsage(c, info, usage, sumUsage)
+		if err := preConsumeUsage(c, info, usage, sumUsage); err != nil {
+			logger.LogError(c, "realtime pre-consume usage failed: "+err.Error())
+		}
 	}
 
 	if localUsage.TotalTokens != 0 {
-		_ = preConsumeUsage(c, info, localUsage, sumUsage)
+		if err := preConsumeUsage(c, info, localUsage, sumUsage); err != nil {
+			logger.LogError(c, "realtime pre-consume local usage failed: "+err.Error())
+		}
 	}
 
 	// check usage total tokens, if 0, use local usage

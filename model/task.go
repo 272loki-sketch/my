@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -477,7 +478,10 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
-	_ = query.Count(&total).Error
+	if err := query.Count(&total).Error; err != nil {
+		common.SysError(fmt.Sprintf("TaskCountAllTasks: count failed: %v", err))
+		return 0
+	}
 	return total
 }
 
@@ -503,7 +507,10 @@ func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
-	_ = query.Count(&total).Error
+	if err := query.Count(&total).Error; err != nil {
+		common.SysError(fmt.Sprintf("TaskCountAllUserTask: count failed: user_id=%d, error=%v", userId, err))
+		return 0
+	}
 	return total
 }
 func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {

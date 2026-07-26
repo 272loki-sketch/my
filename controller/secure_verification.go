@@ -164,7 +164,9 @@ func consumePasskeyReady(c *gin.Context) (bool, error) {
 	readyAt, ok := readyAtRaw.(int64)
 	if !ok {
 		session.Delete(PasskeyReadySessionKey)
-		_ = session.Save()
+		if err := session.Save(); err != nil {
+			common.SysError(fmt.Sprintf("failed to clear passkey ready session: %v", err))
+		}
 		return false, fmt.Errorf("无效的 Passkey 验证状态")
 	}
 	session.Delete(PasskeyReadySessionKey)

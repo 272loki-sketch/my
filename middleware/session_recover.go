@@ -28,7 +28,9 @@ func RecoverBadSession() gin.HandlerFunc {
 		if hasSessionCookie && id == nil && oauthState == nil {
 			log.Printf("[sessions] clearing stale or unreadable session cookie")
 			session.Clear()
-			_ = session.Save()
+			if err := session.Save(); err != nil {
+				log.Printf("[sessions] failed to clear stale session cookie: %v", err)
+			}
 		}
 
 		c.Next()
@@ -40,7 +42,9 @@ func RecoverBadSession() gin.HandlerFunc {
 				strings.Contains(msg, "the value is not valid") {
 				log.Printf("[sessions] corrupted session detected, clearing cookie: %v", err)
 				session.Clear()
-				_ = session.Save()
+				if saveErr := session.Save(); saveErr != nil {
+					log.Printf("[sessions] failed to clear corrupted session cookie: %v", saveErr)
+				}
 				break
 			}
 		}

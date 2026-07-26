@@ -571,7 +571,9 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		return err
 	}
 	if upgradeGroup != "" && logUserId > 0 {
-		_ = UpdateUserGroupCache(logUserId, upgradeGroup)
+		if err := UpdateUserGroupCache(logUserId, upgradeGroup); err != nil {
+			common.SysError(fmt.Sprintf("failed to update user group cache: user_id=%d, group=%s, error=%v", logUserId, upgradeGroup, err))
+		}
 	}
 	if logUserId > 0 {
 		msg := fmt.Sprintf("订阅购买成功，套餐: %s，支付金额: %.2f，支付方式: %s", logPlanTitle, logMoney, logPaymentMethod)
@@ -658,7 +660,9 @@ func AdminBindSubscription(userId int, planId int, sourceNote string) (string, e
 		return "", err
 	}
 	if strings.TrimSpace(plan.UpgradeGroup) != "" {
-		_ = UpdateUserGroupCache(userId, plan.UpgradeGroup)
+		if err := UpdateUserGroupCache(userId, plan.UpgradeGroup); err != nil {
+			common.SysError(fmt.Sprintf("failed to update user group cache: user_id=%d, group=%s, error=%v", userId, plan.UpgradeGroup, err))
+		}
 		return fmt.Sprintf("用户分组将升级到 %s", plan.UpgradeGroup), nil
 	}
 	return "", nil
@@ -762,7 +766,9 @@ func AdminInvalidateUserSubscription(userSubscriptionId int) (string, error) {
 		return "", err
 	}
 	if cacheGroup != "" && userId > 0 {
-		_ = UpdateUserGroupCache(userId, cacheGroup)
+		if err := UpdateUserGroupCache(userId, cacheGroup); err != nil {
+			common.SysError(fmt.Sprintf("failed to update user group cache: user_id=%d, group=%s, error=%v", userId, cacheGroup, err))
+		}
 	}
 	if downgradeGroup != "" {
 		return fmt.Sprintf("用户分组将回退到 %s", downgradeGroup), nil
@@ -803,7 +809,9 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (string, error) {
 		return "", err
 	}
 	if cacheGroup != "" && userId > 0 {
-		_ = UpdateUserGroupCache(userId, cacheGroup)
+		if err := UpdateUserGroupCache(userId, cacheGroup); err != nil {
+			common.SysError(fmt.Sprintf("failed to update user group cache: user_id=%d, group=%s, error=%v", userId, cacheGroup, err))
+		}
 	}
 	if downgradeGroup != "" {
 		return fmt.Sprintf("用户分组将回退到 %s", downgradeGroup), nil
@@ -900,7 +908,9 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			return expiredCount, err
 		}
 		if cacheGroup != "" {
-			_ = UpdateUserGroupCache(userId, cacheGroup)
+			if err := UpdateUserGroupCache(userId, cacheGroup); err != nil {
+				common.SysError(fmt.Sprintf("failed to update user group cache: user_id=%d, group=%s, error=%v", userId, cacheGroup, err))
+			}
 		}
 	}
 	return expiredCount, nil

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -234,7 +235,11 @@ func Disable2FA(c *gin.Context) {
 
 	if err == nil {
 		// 尝试验证TOTP
-		isValidTOTP, _ = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
+		var totpErr error
+		isValidTOTP, totpErr = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
+		if totpErr != nil {
+			common.SysError(fmt.Sprintf("failed to validate TOTP: user_id=%d, error=%v", twoFA.UserId, totpErr))
+		}
 	}
 
 	if !isValidTOTP {
@@ -454,7 +459,11 @@ func Verify2FALogin(c *gin.Context) {
 
 	if err == nil {
 		// 尝试验证TOTP
-		isValidTOTP, _ = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
+		var totpErr error
+		isValidTOTP, totpErr = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
+		if totpErr != nil {
+			common.SysError(fmt.Sprintf("failed to validate TOTP: user_id=%d, error=%v", twoFA.UserId, totpErr))
+		}
 	}
 
 	if !isValidTOTP {

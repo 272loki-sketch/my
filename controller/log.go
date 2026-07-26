@@ -71,8 +71,12 @@ func ManageLogUserStatus(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	_ = model.InvalidateUserCache(req.UserId)
-	_ = model.InvalidateUserTokensCache(req.UserId)
+	if err := model.InvalidateUserCache(req.UserId); err != nil {
+		common.SysError(fmt.Sprintf("failed to invalidate user cache: user_id=%d, error=%v", req.UserId, err))
+	}
+	if err := model.InvalidateUserTokensCache(req.UserId); err != nil {
+		common.SysError(fmt.Sprintf("failed to invalidate user tokens cache: user_id=%d, error=%v", req.UserId, err))
+	}
 	model.RecordLog(req.UserId, model.LogTypeManage, content)
 	common.ApiSuccess(c, gin.H{"status": status})
 }

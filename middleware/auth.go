@@ -446,8 +446,12 @@ func TokenAuth() func(c *gin.Context) {
 				if err := model.DB.Model(&model.User{}).Where("id = ?", token.UserId).Update("status", common.UserStatusDisabled).Error; err != nil {
 					common.SysLog(fmt.Sprintf("failed to auto ban user %d: %s", token.UserId, err.Error()))
 				} else {
-					_ = model.InvalidateUserCache(token.UserId)
-					_ = model.InvalidateUserTokensCache(token.UserId)
+					if err := model.InvalidateUserCache(token.UserId); err != nil {
+						common.SysLog(fmt.Sprintf("failed to invalidate user cache after auto ban: user_id=%d, error=%s", token.UserId, err.Error()))
+					}
+					if err := model.InvalidateUserTokensCache(token.UserId); err != nil {
+						common.SysLog(fmt.Sprintf("failed to invalidate user tokens cache after auto ban: user_id=%d, error=%s", token.UserId, err.Error()))
+					}
 					model.RecordLog(token.UserId, model.LogTypeManage, fmt.Sprintf("自动封禁：%s", matchDetail))
 				}
 				abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))

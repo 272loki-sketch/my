@@ -1,5 +1,11 @@
 package model
 
+import (
+	"fmt"
+
+	"github.com/QuantumNous/new-api/common"
+)
+
 type Midjourney struct {
 	Id          int    `json:"id"`
 	Code        int    `json:"code"`
@@ -198,7 +204,10 @@ func CountAllTasks(queryParams TaskQueryParams) int64 {
 	if queryParams.EndTimestamp != "" {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
-	_ = query.Count(&total).Error
+	if err := query.Count(&total).Error; err != nil {
+		common.SysError(fmt.Sprintf("CountAllTasks: count failed: %v", err))
+		return 0
+	}
 	return total
 }
 
@@ -215,6 +224,9 @@ func CountAllUserTask(userId int, queryParams TaskQueryParams) int64 {
 	if queryParams.EndTimestamp != "" {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
-	_ = query.Count(&total).Error
+	if err := query.Count(&total).Error; err != nil {
+		common.SysError(fmt.Sprintf("CountAllUserTask: count failed: user_id=%d, error=%v", userId, err))
+		return 0
+	}
 	return total
 }

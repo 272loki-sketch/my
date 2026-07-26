@@ -425,13 +425,18 @@ func (user *User) Insert(inviterId int) error {
 	}
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+			if err := IncreaseUserQuota(user.Id, common.QuotaForInvitee, true); err != nil {
+				common.SysError(fmt.Sprintf("failed to grant invitee quota: user_id=%d, quota=%d, error=%v", user.Id, common.QuotaForInvitee, err))
+			} else {
+				RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+			}
 		}
 		if common.QuotaForInviter > 0 {
-			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
+			if err := inviteUser(inviterId); err != nil {
+				common.SysError(fmt.Sprintf("failed to grant inviter quota: user_id=%d, quota=%d, error=%v", inviterId, common.QuotaForInviter, err))
+			} else {
+				RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
+			}
 		}
 	}
 	return nil
@@ -486,12 +491,18 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	}
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+			if err := IncreaseUserQuota(user.Id, common.QuotaForInvitee, true); err != nil {
+				common.SysError(fmt.Sprintf("failed to grant invitee quota: user_id=%d, quota=%d, error=%v", user.Id, common.QuotaForInvitee, err))
+			} else {
+				RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+			}
 		}
 		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
+			if err := inviteUser(inviterId); err != nil {
+				common.SysError(fmt.Sprintf("failed to grant inviter quota: user_id=%d, quota=%d, error=%v", inviterId, common.QuotaForInviter, err))
+			} else {
+				RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
+			}
 		}
 	}
 }

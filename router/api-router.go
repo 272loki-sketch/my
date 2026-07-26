@@ -209,11 +209,12 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
 		}
 		databaseRoute := apiRouter.Group("/database")
-		databaseRoute.Use(middleware.RootAuthSessionOnly())
 		{
-			databaseRoute.GET("/export", controller.ExportDatabase)
-			databaseRoute.POST("/import", controller.ImportDatabase)
-			databaseRoute.POST("/restart", controller.RestartService)
+			// export is triggered by a plain browser navigation, so it cannot
+			// send the New-Api-User header and relies on a same-origin check
+			databaseRoute.GET("/export", middleware.RootAuthSessionOnly(), controller.ExportDatabase)
+			databaseRoute.POST("/import", middleware.RootAuth(), controller.ImportDatabase)
+			databaseRoute.POST("/restart", middleware.RootAuth(), controller.RestartService)
 		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.RootAuth())

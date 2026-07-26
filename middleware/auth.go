@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -192,18 +193,49 @@ func RootAuth() func(c *gin.Context) {
 
 // RootAuthSessionOnly is like RootAuth but does not require the New-Api-User header.
 // Used for file download endpoints where custom headers cannot be sent.
+// Because the custom header cannot act as the CSRF barrier here, the request
+// origin must be same-origin.
 func RootAuthSessionOnly() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelperSessionOnly(c, common.RoleRootUser)
 	}
 }
+
+// isSameOriginRequest reports whether the request was initiated by the site
+// itself. It relies on Fetch Metadata when available and falls back to
+// comparing the Origin/Referer host with the request host.
+func isSameOriginRequest(c *gin.Context) bool {
+	switch c.GetHeader("Sec-Fetch-Site") {
+	case "same-origin", "none":
+		return true
+	case "":
+		// fall through to Origin/Referer checks
+	default:
+		return false
+	}
+	for _, header := range []string{"Origin", "Referer"} {
+		value := c.GetHeader(header)
+		if value == "" {
+			continue
+		}
+		parsed, err := url.Parse(value)
+		if err != nil {
+			return false
+		}
+		return parsed.Host == c.Request.Host
+	}
+	// No browser-supplied origin information: the request cannot be a
+	// cross-site request forgery driven by a browser.
+	return true
+}
+
 func authHelperSessionOnly(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
-	username := session.Get("username")
-	role := session.Get("role")
+	username, _ := session.Get("username").(string)
+	role, _ := session.Get("role").(int)
 	id := session.Get("id")
-	status := session.Get("status")
-	if username == nil {
+	status, _ := session.Get("status").(int)
+	if username == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
@@ -211,7 +243,15 @@ func authHelperSessionOnly(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if status.(int) == common.UserStatusDisabled {
+	if !isSameOriginRequest(c) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "cross-site request rejected",
+		})
+		c.Abort()
+		return
+	}
+	if status == common.UserStatusDisabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
@@ -219,7 +259,7 @@ func authHelperSessionOnly(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if role.(int) < minRole {
+	if role < minRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
@@ -227,7 +267,7 @@ func authHelperSessionOnly(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if !validUserInfo(username.(string), role.(int)) {
+	if !validUserInfo(username, role) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),

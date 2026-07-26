@@ -146,8 +146,12 @@ func main() {
 	}
 
 	if os.Getenv("ENABLE_PPROF") == "true" {
+		pprofAddr := os.Getenv("PPROF_LISTEN")
+		if pprofAddr == "" {
+			pprofAddr = "127.0.0.1:8005"
+		}
 		gopool.Go(func() {
-			log.Println(http.ListenAndServe("0.0.0.0:8005", nil))
+			log.Println(http.ListenAndServe(pprofAddr, nil))
 		})
 		go common.Monitor()
 		common.SysLog("pprof enabled")

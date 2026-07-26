@@ -117,14 +117,14 @@ func logHelper(ctx context.Context, level string, msg string) {
 	}
 }
 
-func LogQuota(quota int) string {
-	// 新逻辑：根据额度展示类型输出
+// formatQuotaValue 按当前额度展示类型格式化额度，返回格式化结果及其对应的单位后缀。
+func formatQuotaValue(quota int) (value string, unitSuffix string) {
 	q := float64(quota)
 	switch operation_setting.GetQuotaDisplayType() {
 	case operation_setting.QuotaDisplayTypeCNY:
 		usd := q / common.QuotaPerUnit
 		cny := usd * operation_setting.USDExchangeRate
-		return fmt.Sprintf("¥%.6f 额度", cny)
+		return fmt.Sprintf("¥%.6f", cny), " 额度"
 	case operation_setting.QuotaDisplayTypeCustom:
 		usd := q / common.QuotaPerUnit
 		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
@@ -135,39 +135,22 @@ func LogQuota(quota int) string {
 		if rate <= 0 {
 			rate = 1
 		}
-		v := usd * rate
-		return fmt.Sprintf("%s%.6f 额度", symbol, v)
+		return fmt.Sprintf("%s%.6f", symbol, usd*rate), " 额度"
 	case operation_setting.QuotaDisplayTypeTokens:
-		return fmt.Sprintf("%d 点额度", quota)
+		return fmt.Sprintf("%d", quota), " 点额度"
 	default: // USD
-		return fmt.Sprintf("＄%.6f 额度", q/common.QuotaPerUnit)
+		return fmt.Sprintf("＄%.6f", q/common.QuotaPerUnit), " 额度"
 	}
 }
 
+func LogQuota(quota int) string {
+	value, unitSuffix := formatQuotaValue(quota)
+	return value + unitSuffix
+}
+
 func FormatQuota(quota int) string {
-	q := float64(quota)
-	switch operation_setting.GetQuotaDisplayType() {
-	case operation_setting.QuotaDisplayTypeCNY:
-		usd := q / common.QuotaPerUnit
-		cny := usd * operation_setting.USDExchangeRate
-		return fmt.Sprintf("¥%.6f", cny)
-	case operation_setting.QuotaDisplayTypeCustom:
-		usd := q / common.QuotaPerUnit
-		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
-		symbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
-		if symbol == "" {
-			symbol = "¤"
-		}
-		if rate <= 0 {
-			rate = 1
-		}
-		v := usd * rate
-		return fmt.Sprintf("%s%.6f", symbol, v)
-	case operation_setting.QuotaDisplayTypeTokens:
-		return fmt.Sprintf("%d", quota)
-	default:
-		return fmt.Sprintf("＄%.6f", q/common.QuotaPerUnit)
-	}
+	value, _ := formatQuotaValue(quota)
+	return value
 }
 
 // LogJson 仅供测试使用 only for test

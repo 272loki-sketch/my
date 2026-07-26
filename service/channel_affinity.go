@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
-	"github.com/samber/hot"
 	"github.com/tidwall/gjson"
 )
 
@@ -90,20 +89,14 @@ func getChannelAffinityCache() *cachex.HybridCache[int] {
 			defaultTTLSeconds = 3600
 		}
 
-		channelAffinityCache = cachex.NewHybridCache[int](cachex.HybridCacheConfig[int]{
-			Namespace: cachex.Namespace(channelAffinityCacheNamespace),
-			Redis:     common.RDB,
-			RedisEnabled: func() bool {
-				return common.RedisEnabled && common.RDB != nil
-			},
-			RedisCodec: cachex.IntCodec{},
-			Memory: func() *hot.HotCache[string, int] {
-				return hot.NewHotCache[string, int](hot.LRU, capacity).
-					WithTTL(time.Duration(defaultTTLSeconds) * time.Second).
-					WithJanitor().
-					Build()
-			},
-		})
+		channelAffinityCache = cachex.NewLRUHybridCache[int](
+			channelAffinityCacheNamespace,
+			common.RDB,
+			common.RedisAvailable,
+			cachex.IntCodec{},
+			capacity,
+			time.Duration(defaultTTLSeconds)*time.Second,
+		)
 	})
 	return channelAffinityCache
 }
@@ -940,20 +933,14 @@ func getChannelAffinityUsageCacheStatsCache() *cachex.HybridCache[ChannelAffinit
 			}
 		}
 
-		channelAffinityUsageCacheStatsCache = cachex.NewHybridCache[ChannelAffinityUsageCacheCounters](cachex.HybridCacheConfig[ChannelAffinityUsageCacheCounters]{
-			Namespace: cachex.Namespace(channelAffinityUsageCacheStatsNamespace),
-			Redis:     common.RDB,
-			RedisEnabled: func() bool {
-				return common.RedisEnabled && common.RDB != nil
-			},
-			RedisCodec: cachex.JSONCodec[ChannelAffinityUsageCacheCounters]{},
-			Memory: func() *hot.HotCache[string, ChannelAffinityUsageCacheCounters] {
-				return hot.NewHotCache[string, ChannelAffinityUsageCacheCounters](hot.LRU, capacity).
-					WithTTL(time.Duration(defaultTTLSeconds) * time.Second).
-					WithJanitor().
-					Build()
-			},
-		})
+		channelAffinityUsageCacheStatsCache = cachex.NewLRUHybridCache[ChannelAffinityUsageCacheCounters](
+			channelAffinityUsageCacheStatsNamespace,
+			common.RDB,
+			common.RedisAvailable,
+			cachex.JSONCodec[ChannelAffinityUsageCacheCounters]{},
+			capacity,
+			time.Duration(defaultTTLSeconds)*time.Second,
+		)
 	})
 	return channelAffinityUsageCacheStatsCache
 }

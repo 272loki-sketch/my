@@ -243,9 +243,9 @@ func buildFetchOperationURL(baseURL, upstreamName string) (string, error) {
 
 // FetchTask fetch task status
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid task_id")
+	taskID, err := channel.TaskIDFromBody(body)
+	if err != nil {
+		return nil, err
 	}
 	upstreamName, err := taskcommon.DecodeLocalTaskID(taskID)
 	if err != nil {
@@ -268,19 +268,12 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire access token: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("x-goog-user-project", adc.ProjectID)
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return channel.DoTaskFetchRequest(http.MethodPost, url, bytes.NewReader(data), map[string]string{
+		"Content-Type":        "application/json",
+		"Accept":              "application/json",
+		"Authorization":       "Bearer " + token,
+		"x-goog-user-project": adc.ProjectID,
+	}, proxy)
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {

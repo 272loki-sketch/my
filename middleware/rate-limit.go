@@ -21,7 +21,7 @@ var defNext = func(c *gin.Context) {
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	ctx := context.Background()
 	rdb := common.RDB
-	key := "rateLimit:" + mark + c.ClientIP()
+	key := "rateLimit:" + mark
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -65,26 +65,54 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	key := mark + c.ClientIP()
-	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
+	if !inMemoryRateLimiter.Request(mark, maxRequestNum, duration) {
 		c.Status(http.StatusTooManyRequests)
 		c.Abort()
 		return
 	}
 }
 
-func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if common.RedisEnabled {
-		return func(c *gin.Context) {
-			redisRateLimiter(c, maxRequestNum, duration, mark)
+// rateLimitMarkFunc resolves the rate-limit bucket for a request. Returning
+// false means the request was already rejected and must not be counted.
+type rateLimitMarkFunc func(c *gin.Context) (mark string, ok bool)
+
+func clientIPMark(mark string) rateLimitMarkFunc {
+	return func(c *gin.Context) (string, bool) {
+		return mark + c.ClientIP(), true
+	}
+}
+
+func userIdMark(mark string) rateLimitMarkFunc {
+	return func(c *gin.Context) (string, bool) {
+		userId := c.GetInt("id")
+		if userId == 0 {
+			c.Status(http.StatusUnauthorized)
+			c.Abort()
+			return "", false
 		}
+		return fmt.Sprintf("%s:user:%d", mark, userId), true
+	}
+}
+
+func rateLimitFactoryWithMark(maxRequestNum int, duration int64, markFunc rateLimitMarkFunc) func(c *gin.Context) {
+	limiter := memoryRateLimiter
+	if common.RedisEnabled {
+		limiter = redisRateLimiter
 	} else {
 		// It's safe to call multi times.
 		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
-		return func(c *gin.Context) {
-			memoryRateLimiter(c, maxRequestNum, duration, mark)
-		}
 	}
+	return func(c *gin.Context) {
+		mark, ok := markFunc(c)
+		if !ok {
+			return
+		}
+		limiter(c, maxRequestNum, duration, mark)
+	}
+}
+
+func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
+	return rateLimitFactoryWithMark(maxRequestNum, duration, clientIPMark(mark))
 }
 
 func GlobalWebRateLimit() func(c *gin.Context) {
@@ -120,79 +148,7 @@ func UploadRateLimit() func(c *gin.Context) {
 // instead of client IP, making it resistant to proxy rotation attacks.
 // Must be used AFTER authentication middleware (UserAuth).
 func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
-	if common.RedisEnabled {
-		return func(c *gin.Context) {
-			userId := c.GetInt("id")
-			if userId == 0 {
-				c.Status(http.StatusUnauthorized)
-				c.Abort()
-				return
-			}
-			key := fmt.Sprintf("rateLimit:%s:user:%d", mark, userId)
-			userRedisRateLimiter(c, maxRequestNum, duration, key)
-		}
-	}
-	// It's safe to call multi times.
-	inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
-	return func(c *gin.Context) {
-		userId := c.GetInt("id")
-		if userId == 0 {
-			c.Status(http.StatusUnauthorized)
-			c.Abort()
-			return
-		}
-		key := fmt.Sprintf("%s:user:%d", mark, userId)
-		if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
-			return
-		}
-	}
-}
-
-// userRedisRateLimiter is like redisRateLimiter but accepts a pre-built key
-// (to support user-ID-based keys).
-func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key string) {
-	ctx := context.Background()
-	rdb := common.RDB
-	listLength, err := rdb.LLen(ctx, key).Result()
-	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
-		c.Abort()
-		return
-	}
-	if listLength < int64(maxRequestNum) {
-		rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-		rdb.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
-	} else {
-		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
-		oldTime, err := time.Parse(timeFormat, oldTimeStr)
-		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return
-		}
-		nowTimeStr := time.Now().Format(timeFormat)
-		nowTime, err := time.Parse(timeFormat, nowTimeStr)
-		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return
-		}
-		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
-			rdb.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
-			return
-		} else {
-			rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-			rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
-			rdb.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
-		}
-	}
+	return rateLimitFactoryWithMark(maxRequestNum, duration, userIdMark(mark))
 }
 
 // SearchRateLimit returns a per-user rate limiter for search endpoints.

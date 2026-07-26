@@ -344,43 +344,41 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 	return channels, err
 }
 
-func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
-	var channels []*Channel
+// buildChannelSearchCondition 构造渠道搜索的 WHERE 子句与参数，
+// 兼容 SQLite / MySQL / PostgreSQL 的列引用与分组匹配写法。
+func buildChannelSearchCondition(keyword string, group string, model string) (string, []interface{}) {
 	modelsCol := "`models`"
-
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingPostgreSQL {
-		modelsCol = `"models"`
-	}
-
 	baseURLCol := "`base_url`"
 	// 如果是 PostgreSQL，使用双引号
 	if common.UsingPostgreSQL {
+		modelsCol = `"models"`
 		baseURLCol = `"base_url"`
 	}
+
+	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
+	args := []interface{}{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
+
+	if group != "" && group != "null" {
+		groupCondition := `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
+		if common.UsingMySQL {
+			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
+		}
+		whereClause += " AND " + groupCondition
+		args = append(args, "%,"+group+",%")
+	}
+
+	return whereClause, args
+}
+
+func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+	var channels []*Channel
 
 	order := resolveChannelSortOptions(idSort, sortOptions)
 
 	// 构造基础查询
 	baseQuery := DB.Model(&Channel{}).Omit("key")
 
-	// 构造WHERE子句
-	var whereClause string
-	var args []interface{}
-	if group != "" && group != "null" {
-		var groupCondition string
-		if common.UsingMySQL {
-			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
-		} else {
-			// sqlite, PostgreSQL
-			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
-		}
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
-	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
-	}
+	whereClause, args := buildChannelSearchCondition(keyword, group, model)
 
 	// 执行查询
 	err := order.Apply(baseQuery.Where(whereClause, args...)).Find(&channels).Error
@@ -835,18 +833,6 @@ func GetPaginatedTags(offset int, limit int) ([]*string, error) {
 
 func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
 	var tags []*string
-	modelsCol := "`models`"
-
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingPostgreSQL {
-		modelsCol = `"models"`
-	}
-
-	baseURLCol := "`base_url`"
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingPostgreSQL {
-		baseURLCol = `"base_url"`
-	}
 
 	order := "priority desc"
 	if idSort {
@@ -856,23 +842,7 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	// 构造基础查询
 	baseQuery := DB.Model(&Channel{}).Omit("key")
 
-	// 构造WHERE子句
-	var whereClause string
-	var args []interface{}
-	if group != "" && group != "null" {
-		var groupCondition string
-		if common.UsingMySQL {
-			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
-		} else {
-			// sqlite, PostgreSQL
-			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
-		}
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
-	} else {
-		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
-	}
+	whereClause, args := buildChannelSearchCondition(keyword, group, model)
 
 	subQuery := baseQuery.Where(whereClause, args...).
 		Select("tag").

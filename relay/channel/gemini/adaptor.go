@@ -123,6 +123,25 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	return geminiRequest, nil
 }
 
+// TrimThinkingSuffix 去除模型名中的思考相关后缀（-thinking-<budget>/-thinking/-nothinking/努力等级），
+// 用于构造上游请求时还原真实模型名。
+func TrimThinkingSuffix(modelName string) string {
+	if strings.Contains(modelName, "-thinking-") {
+		// 新增逻辑：处理 -thinking-<budget> 格式
+		return strings.Split(modelName, "-thinking-")[0]
+	}
+	if strings.HasSuffix(modelName, "-thinking") { // 旧的适配
+		return strings.TrimSuffix(modelName, "-thinking")
+	}
+	if strings.HasSuffix(modelName, "-nothinking") {
+		return strings.TrimSuffix(modelName, "-nothinking")
+	}
+	if baseModel, level, ok := reasoning.TrimEffortSuffix(modelName); ok && level != "" {
+		return baseModel
+	}
+	return modelName
+}
+
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 
 }
@@ -131,17 +150,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 
 	if model_setting.GetGeminiSettings().ThinkingAdapterEnabled &&
 		!model_setting.ShouldPreserveThinkingSuffix(info.OriginModelName) {
-		// 新增逻辑：处理 -thinking-<budget> 格式
-		if strings.Contains(info.UpstreamModelName, "-thinking-") {
-			parts := strings.Split(info.UpstreamModelName, "-thinking-")
-			info.UpstreamModelName = parts[0]
-		} else if strings.HasSuffix(info.UpstreamModelName, "-thinking") { // 旧的适配
-			info.UpstreamModelName = strings.TrimSuffix(info.UpstreamModelName, "-thinking")
-		} else if strings.HasSuffix(info.UpstreamModelName, "-nothinking") {
-			info.UpstreamModelName = strings.TrimSuffix(info.UpstreamModelName, "-nothinking")
-		} else if baseModel, level, ok := reasoning.TrimEffortSuffix(info.UpstreamModelName); ok && level != "" {
-			info.UpstreamModelName = baseModel
-		}
+		info.UpstreamModelName = TrimThinkingSuffix(info.UpstreamModelName)
 	}
 
 	version := model_setting.GetGeminiVersionSetting(info.UpstreamModelName)

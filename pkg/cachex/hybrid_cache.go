@@ -52,6 +52,23 @@ func NewHybridCache[V any](cfg HybridCacheConfig[V]) *HybridCache[V] {
 	}
 }
 
+// NewLRUHybridCache builds a HybridCache whose memory tier is a TTL-bounded LRU
+// cache, which is the wiring used by every hybrid cache in this project.
+func NewLRUHybridCache[V any](namespace string, rdb *redis.Client, redisEnabled func() bool, codec ValueCodec[V], capacity int, ttl time.Duration) *HybridCache[V] {
+	return NewHybridCache[V](HybridCacheConfig[V]{
+		Namespace:    Namespace(namespace),
+		Redis:        rdb,
+		RedisEnabled: redisEnabled,
+		RedisCodec:   codec,
+		Memory: func() *hot.HotCache[string, V] {
+			return hot.NewHotCache[string, V](hot.LRU, capacity).
+				WithTTL(ttl).
+				WithJanitor().
+				Build()
+		},
+	})
+}
+
 func (c *HybridCache[V]) FullKey(key string) string {
 	return c.ns.FullKey(key)
 }

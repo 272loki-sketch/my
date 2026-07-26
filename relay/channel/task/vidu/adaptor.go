@@ -190,26 +190,17 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 }
 
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid task_id")
-	}
-
-	url := fmt.Sprintf("%s/ent/v2/tasks/%s/creations", baseUrl, taskID)
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	taskID, err := channel.TaskIDFromBody(body)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Token "+key)
+	url := fmt.Sprintf("%s/ent/v2/tasks/%s/creations", baseUrl, taskID)
 
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return channel.DoTaskFetchRequest(http.MethodGet, url, nil, map[string]string{
+		"Accept":        "application/json",
+		"Authorization": "Token " + key,
+	}, proxy)
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

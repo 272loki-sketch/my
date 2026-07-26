@@ -135,18 +135,10 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", requestUrl, bytes.NewBuffer(byteBody))
-	if err != nil {
-		common.SysLog(fmt.Sprintf("Get Task error: %v", err))
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+key)
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return channel.DoTaskFetchRequest(http.MethodPost, requestUrl, bytes.NewBuffer(byteBody), map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": "Bearer " + key,
+	}, proxy)
 }
 
 func actionValidate(c *gin.Context, sunoRequest *dto.SunoSubmitReq, action string) (err error) {

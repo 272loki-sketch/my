@@ -529,6 +529,32 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	return resp, nil
 }
 
+// TaskIDFromBody extracts the task id from a task polling body.
+func TaskIDFromBody(body map[string]any) (string, error) {
+	taskID, ok := body["task_id"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid task_id")
+	}
+	return taskID, nil
+}
+
+// DoTaskFetchRequest sends a task polling request with the given headers through
+// a proxy-aware http client.
+func DoTaskFetchRequest(method string, url string, requestBody io.Reader, headers map[string]string, proxy string) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	client, err := service.GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return nil, fmt.Errorf("new proxy http client failed: %w", err)
+	}
+	return client.Do(req)
+}
+
 func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {
 	fullRequestURL, err := a.BuildRequestURL(info)
 	if err != nil {

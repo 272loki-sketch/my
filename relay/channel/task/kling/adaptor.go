@@ -216,9 +216,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 // FetchTask fetch task status
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid task_id")
+	taskID, err := channel.TaskIDFromBody(body)
+	if err != nil {
+		return nil, err
 	}
 	action, ok := body["action"].(string)
 	if !ok {
@@ -230,25 +230,16 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		url = fmt.Sprintf("%s/kling%s/%s", baseUrl, path, taskID)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
 	token, err := a.createJWTTokenWithKey(key)
 	if err != nil {
 		token = key
 	}
 
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "kling-sdk/1.0")
-
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return channel.DoTaskFetchRequest(http.MethodGet, url, nil, map[string]string{
+		"Accept":        "application/json",
+		"Authorization": "Bearer " + token,
+		"User-Agent":    "kling-sdk/1.0",
+	}, proxy)
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

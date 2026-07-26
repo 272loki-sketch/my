@@ -32,7 +32,9 @@ func PopSessionData(c *gin.Context, key string) (*webauthn.SessionData, error) {
 		return nil, errSessionNotFound
 	}
 	session.Delete(key)
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		return nil, err
+	}
 	var data webauthn.SessionData
 	switch value := raw.(type) {
 	case string:

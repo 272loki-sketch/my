@@ -116,7 +116,10 @@ func updatePricing() {
 	}
 	// 预加载模型元数据与供应商一次，避免循环查询
 	var allMeta []Model
-	_ = DB.Find(&allMeta).Error
+	if err := DB.Find(&allMeta).Error; err != nil {
+		common.SysError(fmt.Sprintf("updatePricing: failed to load model metadata: %v", err))
+		return
+	}
 	metaMap := make(map[string]*Model)
 	prefixList := make([]*Model, 0)
 	suffixList := make([]*Model, 0)
@@ -168,7 +171,10 @@ func updatePricing() {
 
 	// 预加载供应商
 	var vendors []Vendor
-	_ = DB.Find(&vendors).Error
+	if err := DB.Find(&vendors).Error; err != nil {
+		common.SysError(fmt.Sprintf("updatePricing: failed to load vendors: %v", err))
+		return
+	}
 	vendorMap := make(map[int]*Vendor)
 	for i := range vendors {
 		vendorMap[vendors[i].Id] = &vendors[i]

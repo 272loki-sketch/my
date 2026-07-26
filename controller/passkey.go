@@ -562,7 +562,9 @@ func requireSecureVerificationMethod(c *gin.Context, method string) bool {
 	if !ok || time.Now().Unix()-verifiedAt >= SecureVerificationTimeout {
 		session.Delete(SecureVerificationSessionKey)
 		session.Delete(secureVerificationMethodSessionKey)
-		_ = session.Save()
+		if err := session.Save(); err != nil {
+			common.SysError(fmt.Sprintf("failed to clear secure verification session: %v", err))
+		}
 		common.ApiErrorMsg(c, "请先完成安全验证")
 		return false
 	}

@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
@@ -80,7 +82,9 @@ func SecureVerificationRequired() gin.HandlerFunc {
 func clearSecureVerificationSession(session sessions.Session) {
 	session.Delete(SecureVerificationSessionKey)
 	session.Delete(secureVerificationMethodSessionKey)
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		common.SysError(fmt.Sprintf("failed to clear secure verification session: %v", err))
+	}
 }
 
 // OptionalSecureVerification 可选的安全验证中间件

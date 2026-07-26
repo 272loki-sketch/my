@@ -345,6 +345,7 @@ func SyncUpstreamModels(c *gin.Context) {
 	createdModels := 0
 	createdVendors := 0
 	updatedModels := 0
+	failedList := make([]string, 0)
 	skipped := make([]string, 0)
 	createdList := make([]string, 0)
 	updatedList := make([]string, 0)
@@ -411,7 +412,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
 
 			// 应用字段覆盖（事务）
-			_ = model.DB.Transaction(func(tx *gorm.DB) error {
+			if err := model.DB.Transaction(func(tx *gorm.DB) error {
 				needUpdate := false
 				if containsField(ow.Fields, "description") {
 					local.Description = up.Description
@@ -446,7 +447,10 @@ func SyncUpstreamModels(c *gin.Context) {
 				updatedModels++
 				updatedList = append(updatedList, ow.ModelName)
 				return nil
-			})
+			}); err != nil {
+				common.SysError(fmt.Sprintf("model sync: failed to apply overrides for %s: %v", ow.ModelName, err))
+				failedList = append(failedList, ow.ModelName)
+			}
 		}
 	}
 
@@ -459,6 +463,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			"skipped_models":  skipped,
 			"created_list":    createdList,
 			"updated_list":    updatedList,
+			"failed_list":     failedList,
 			"source": gin.H{
 				"locale":      req.Locale,
 				"models_url":  modelsURL,
@@ -544,7 +549,10 @@ func SyncUpstreamPreview(c *gin.Context) {
 	// 2) 本地已有模型
 	var locals []model.Model
 	if len(upstreamNames) > 0 {
-		_ = model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error
+		if err := model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 
 	// 本地 vendor 名称映射
@@ -561,7 +569,10 @@ func SyncUpstreamPreview(c *gin.Context) {
 	idToVendorName := make(map[int]string)
 	if len(vendorIDs) > 0 {
 		var dbVendors []model.Vendor
-		_ = model.DB.Where("id IN ?", vendorIDs).Find(&dbVendors).Error
+		if err := model.DB.Where("id IN ?", vendorIDs).Find(&dbVendors).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
 		for _, v := range dbVendors {
 			idToVendorName[v.Id] = v.Name
 		}

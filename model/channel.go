@@ -224,7 +224,9 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 				println(fmt.Sprintf("channel %d polling index: %d", channel.Id, channel.ChannelInfo.MultiKeyPollingIndex))
 			}
 			if !common.MemoryCacheEnabled {
-				_ = channel.SaveChannelInfo()
+				if err := channel.SaveChannelInfo(); err != nil {
+					common.SysError(fmt.Sprintf("failed to persist channel info: channel_id=%d, error=%v", channel.Id, err))
+				}
 			} else {
 				// CacheUpdateChannel(channel)
 			}
@@ -908,7 +910,9 @@ func (channel *Channel) GetSetting() dto.ChannelSettings {
 		if err != nil {
 			common.SysLog(fmt.Sprintf("failed to unmarshal setting: channel_id=%d, error=%v", channel.Id, err))
 			channel.Setting = nil // 清空设置以避免后续错误
-			_ = channel.Save()    // 保存修改
+			if saveErr := channel.Save(); saveErr != nil {
+				common.SysError(fmt.Sprintf("failed to reset invalid setting: channel_id=%d, error=%v", channel.Id, saveErr))
+			}
 		}
 	}
 	return setting
@@ -930,7 +934,9 @@ func (channel *Channel) GetOtherSettings() dto.ChannelOtherSettings {
 		if err != nil {
 			common.SysLog(fmt.Sprintf("failed to unmarshal setting: channel_id=%d, error=%v", channel.Id, err))
 			channel.OtherSettings = "{}" // 清空设置以避免后续错误
-			_ = channel.Save()           // 保存修改
+			if saveErr := channel.Save(); saveErr != nil {
+				common.SysError(fmt.Sprintf("failed to reset invalid other settings: channel_id=%d, error=%v", channel.Id, saveErr))
+			}
 		}
 	}
 	return setting

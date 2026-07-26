@@ -515,6 +515,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
+	if common2.DebugEnabled {
+		logger.LogDebug(c, fmt.Sprintf("Authorization header: %s", req.Header.Get("Authorization")))
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
